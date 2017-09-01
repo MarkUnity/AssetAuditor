@@ -293,12 +293,13 @@ namespace UnityAssetAuditor
 
         private void OnFocus()
         {
-            if (m_Initialized)
+            // this doesn't seem to be needed
+            /*if (m_Initialized)
             {
                 GatherAssetRules();
                 m_TreeView.treeModel.SetData(GetData());
                 m_TreeView.Reload();
-            }
+            }*/
         }
 
         void OnGUI()
