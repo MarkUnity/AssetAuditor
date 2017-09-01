@@ -22,6 +22,7 @@ namespace UnityAssetAuditor
         private static List<AssetAuditor.AssetRule> assetRules;
         private List<string> assetRuleNames;
         private static int selected = 0;
+        private static int selectedSelective = 0;
         private string[] affectedAssets;
         private Action<AssetAuditTreeElement> act;
 
@@ -235,26 +236,25 @@ namespace UnityAssetAuditor
                 }
                 else
                 {
-                    foreach (string property in assetRules[selected].SelectiveProperties)
+                    string property = assetRules[selected].SelectiveProperties[selectedSelective];
+
+                    var realname = AssetAuditor.GetPropertyNameFromDisplayName(assetImporterSO, property);
+
+                    var foundAssetSP = assetImporterSO.FindProperty(realname);
+
+                    var assetRuleSP = ruleImporterSO.FindProperty(realname);
+
+                    if (AssetAuditor.CompareSerializedProperty(foundAssetSP, assetRuleSP))
                     {
-                        var realname = AssetAuditor.GetPropertyNameFromDisplayName(assetImporterSO, property);
-
-                        var foundAssetSP = assetImporterSO.FindProperty(realname);
-
-                        var assetRuleSP = ruleImporterSO.FindProperty(realname);
-
-                        if (AssetAuditor.CompareSerializedProperty(foundAssetSP, assetRuleSP))
-                        {
-                            elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                                affectedAsset,
-                                depth + 1, id++, true, true, assetRules[selected].assetType));
-                        }
-                        else
-                        {
-                            elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                                affectedAsset,
-                                depth + 1, id++, true, false, assetRules[selected].assetType));
-                        }
+                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
+                            affectedAsset,
+                            depth + 1, id++, true, true, assetRules[selected].assetType));
+                    }
+                    else
+                    {
+                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
+                            affectedAsset,
+                            depth + 1, id++, true, false, assetRules[selected].assetType));
                     }
                 }
             }
@@ -321,6 +321,7 @@ namespace UnityAssetAuditor
             selected = EditorGUI.Popup(ruleSelectRect, "Rule Name", selected, assetRuleNames.ToArray());
             if (EditorGUI.EndChangeCheck())
             {
+                selectedSelective = 0;
                 m_TreeView.treeModel.SetData(GetData());
                 m_TreeView.Reload();
             }
@@ -340,9 +341,16 @@ namespace UnityAssetAuditor
                     AssetAuditor.WriteUserData(AssetDatabase.GUIDToAssetPath(ar.AssetGuid), ar);
                 }
                 
-                if(ar.SelectiveProperties != null && ar.SelectiveProperties.Count > 0)
-                EditorGUI.IntPopup(SelectivePropRect, "Selective Properties", 0, ar.SelectiveProperties.ToArray(),
-                    new int[]{0});
+                if (ar.SelectiveProperties != null && ar.SelectiveProperties.Count > 0)
+                {
+                    EditorGUI.BeginChangeCheck();
+                    selectedSelective = EditorGUI.Popup(SelectivePropRect, "Selective Properties", selectedSelective, ar.SelectiveProperties.ToArray());
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        m_TreeView.treeModel.SetData(GetData());
+                        m_TreeView.Reload();
+                    }
+                }
             }
         }
 
