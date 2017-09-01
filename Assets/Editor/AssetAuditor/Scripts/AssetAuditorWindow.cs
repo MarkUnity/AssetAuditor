@@ -107,10 +107,14 @@ namespace UnityAssetAuditor
 
             List<AssetAuditTreeElement> elements = new List<AssetAuditTreeElement>();
 
-
             // check to see if there any rules
             if (assetRules.Count == 0) return null;
 
+            // make sure selected index is valid
+            if (selected >= assetRules.Count)
+            {
+                selected = assetRules.Count - 1;
+            }
 
             // get the affected assets
             affectedAssets = AssetAuditor.GetAffectedAssets(assetRules[selected]);
@@ -172,6 +176,11 @@ namespace UnityAssetAuditor
                     var assetimporter =
                         AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
                             TextureImporter;
+
+                    // this may happen (e.g. render texture)
+                    if (assetimporter == null)
+                        continue;
+
                     var ruleimporter =
                         AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRules[selected].AssetGuid)) as
                             TextureImporter;
