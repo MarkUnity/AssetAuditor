@@ -137,6 +137,12 @@ namespace UnityAssetAuditor
                     var foundAssetsSPCopy = foundAssetSp.Copy();
                     var assetRuleSPCopy = assetRuleSp.Copy();
 
+                    // we must get the next sibling SerializedProperties to know when to stop the comparison
+                    var nextSiblingAssetSP = foundAssetSp.Copy ();
+                    var nextSiblingRuleSP = assetRuleSp.Copy ();
+                    nextSiblingAssetSP.NextVisible (false);
+                    nextSiblingRuleSP.NextVisible (false);
+
                     bool asset, found;
                     
                     do
@@ -155,7 +161,9 @@ namespace UnityAssetAuditor
                         }
                         asset = foundAssetsSPCopy.NextVisible(true);
                         found = assetRuleSPCopy.NextVisible(true);
-                    } while (found && asset);
+                    } while (found && asset &&
+                        !SerializedProperty.EqualContents (foundAssetsSPCopy, nextSiblingAssetSP) &&
+                        !SerializedProperty.EqualContents (assetRuleSPCopy, nextSiblingRuleSP));
 
                     return true;
                 case SerializedPropertyType.Integer:
