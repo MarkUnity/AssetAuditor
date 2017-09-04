@@ -357,6 +357,9 @@ namespace UnityAssetAuditor
 
         public static bool RuleExists(AssetAuditor.AssetRule assetRule)
         {
+            if (!AssetDatabase.IsValidFolder("Assets/Editor/AssetAuditor/ProxyAssets"))
+                AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor", "ProxyAssets");
+            
             foreach (var asset in AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"}))
             {
                 var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
