@@ -360,15 +360,23 @@ namespace UnityAssetAuditor
             // clear current list
             assetRules = new List<AssetAuditor.AssetRule>();
 
+            int progress = 0;
+            var foundAssets = AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"});
             // get all assets in the proxyassets folder
-            foreach (var asset in AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"}))
+            foreach (var asset in foundAssets)
             {
                 var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
                 var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
                 AssetAuditor.AssetRule ar = new AssetAuditor.AssetRule();
                 ar = JsonUtility.FromJson<AssetAuditor.AssetRule>(assetImporter.userData);
                 assetRules.Add(ar);
+
+                progress++;
+                EditorUtility.DisplayProgressBar("Gathering Asset Rules" , ar.RuleName , (float)progress/(float)foundAssets.Length);
             }
+            
+            EditorUtility.ClearProgressBar();
+            
             assetRuleNames.Clear();
             foreach (var assetRule in assetRules)
             {
