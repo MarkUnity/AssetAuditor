@@ -9,6 +9,11 @@ using UnityEngine;
 
 namespace UnityAssetAuditor
 {
+
+    public delegate void OnGatherAssetRulesComplete();
+
+    public delegate void OnGatherDataComplete();
+    
     class AssetAuditorWindow : EditorWindow
     {
         [NonSerialized] bool m_Initialized;
@@ -25,6 +30,14 @@ namespace UnityAssetAuditor
         private static int selectedSelective = 0;
         private string[] affectedAssets;
         private Action<AssetAuditTreeElement> act;
+
+        private OnGatherAssetRulesComplete onGatherAssetRulesComplete;
+        private OnGatherDataComplete onGatherDataComplete;
+        private List<AssetAuditTreeElement> elements;
+        private bool gatherAssetsComplete;
+        private bool gatherDataComplete;
+        private List<AssetAuditTreeElement> tempElements;
+
 
         [MenuItem("Asset Auditing/Auditor View")]
         public static AssetAuditorWindow GetWindow()
@@ -76,219 +89,76 @@ namespace UnityAssetAuditor
             if (!m_Initialized)
             {
                 act = FixRule;
-                assetRuleNames = new List<string>();
-                GatherAssetRules();
+                
+                
+                if(!gatherAssetsComplete) GatherAssetRules();
+
+                if(!gatherDataComplete && gatherAssetsComplete)
+                    GatherData();
+
+                if (gatherAssetsComplete && gatherDataComplete) m_Initialized = true;
+            }
+        }
+
+
+        void GatherAssetRules()
+        {
+            gatherAssetsComplete = false;
+            AssetAuditor.queueComplete += OnGatherAssetRulesComplete;
+                
+            assetRules = new List<AssetAuditor.AssetRule>();
+            assetRuleNames = new List<string>();
+                
+                
+            AssetAuditor.ClearQueue();
+            AssetAuditor.AddEnumerator(AssetAuditor.GatherAssetRules(assetRules,assetRuleNames));   
+        }
+        
+        private void OnGatherAssetRulesComplete()
+        {
+            AssetAuditor.queueComplete -= OnGatherAssetRulesComplete;
+            gatherAssetsComplete = true;
+            GatherData();
+        }
+
+
+        void GatherData()
+        {
+            gatherDataComplete = false;
+            AssetAuditor.queueComplete += OnGatherDataComplete;
+            elements = new List<AssetAuditTreeElement>();
+            
+            AssetAuditor.ClearQueue();
+            AssetAuditor.UpdateAffectedAssets(assetRules[selected]);
+            AssetAuditor.AddEnumerator(AssetAuditor.GatherData(assetRules[selected],elements,selectedSelective));  
+        }
+        
+        private void OnGatherDataComplete()
+        {
+            AssetAuditor.queueComplete -= OnGatherDataComplete;
+
+           // elements = tempElements;
+
+            if (m_Initialized)
+            {
                 // Check if it already exists (deserialized from window layout file or scriptable object)
                 if (m_TreeViewState == null)
                     m_TreeViewState = new TreeViewState();
 
-                var headerState = AssetAuditTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
-                if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
-                    MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
-                m_MultiColumnHeaderState = headerState;
-
-
-                var multiColumnHeader = new MultiColumnHeader(headerState);
-                var data = GetData();
-                if (data == null) return;
-                var treeModel = new TreeModel<AssetAuditTreeElement>(data);
-                m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act);
-
-                m_Initialized = true;
-            }
-        }
-
-        IList<AssetAuditTreeElement> GetData()
-        {
-            int id = -1;
-            if (assetRules == null)
-            {
-                GatherAssetRules();
+                m_TreeView.treeModel.SetData(elements);
+                m_TreeView.Reload();
             }
 
-            List<AssetAuditTreeElement> elements = new List<AssetAuditTreeElement>();
-
-            // check to see if there any rules
-            if (assetRules.Count == 0) return null;
-
-            // make sure selected index is valid
-            if (selected >= assetRules.Count)
-            {
-                selected = assetRules.Count - 1;
-            }
-
-            // get the affected assets
-            affectedAssets = AssetAuditor.GetAffectedAssets(assetRules[selected]);
-
-            // build the directory tree from the affected assets
-            elements.Add(new AssetAuditTreeElement("Root", "", -1, 0, false, false, AssetAuditor.AssetType.Folder ));
-
-            // early out if there are no affected assets
-            if (affectedAssets.Length == 0)
-            {
-                return elements;
-            }
-
-            AssetAuditTreeElement assetsFolder = new AssetAuditTreeElement("Assets", "Assets", 0, id++, false, false,
-                AssetAuditor.AssetType.Folder );
-            // add the project root "Assets" folder
-            elements.Add(assetsFolder);
-
-            if (assetsFolder.children == null) assetsFolder.children = new List<TreeElement>();
-            // search the next level down directories
-
-            var dirs = Directory.GetDirectories(Application.dataPath);
-
-            foreach (string t in dirs)
-            {
-                // check if the directory actually contais any of the assets we want to show
-                foreach (var affectedAsset in affectedAssets)
-                {
-                    if (affectedAsset.Contains(t))
-                    {
-                        AddChildrenRecursive(assetsFolder, t, ref id, elements);
-                        break;
-                    }
-                }
-
-                CheckAffectedAssets(elements, t, assetsFolder.depth, ref id);
-            }
-
-            CheckAffectedAssets(elements, Application.dataPath, assetsFolder.depth, ref id);
-
-            return elements;
-        }
-
-        private void CheckAffectedAssets(List<AssetAuditTreeElement> elements, string searchDirectory, int depth,
-            ref int id)
-        {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-                searchDirectory = searchDirectory.Replace('/', '\\');
-
-            foreach (var affectedAsset in affectedAssets)
-            {
-                if (new DirectoryInfo(affectedAsset).Parent.FullName != searchDirectory) continue;
-                
-                SerializedObject assetImporterSO = null;
-                SerializedObject ruleImporterSO = null;
-
-                if (AssetAuditor.TypeFromAssetType(assetRules[selected].assetType) == typeof(Texture))
-                {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            TextureImporter;
-
-                    // this may happen (e.g. render texture)
-                    if (assetimporter == null)
-                        continue;
-
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRules[selected].AssetGuid)) as
-                            TextureImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
-
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
-                    
-                if (AssetAuditor.TypeFromAssetType(assetRules[selected].assetType) == typeof(GameObject))
-                {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            ModelImporter;
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRules[selected].AssetGuid)) as
-                            ModelImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
-
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
-
-                if (AssetAuditor.TypeFromAssetType(assetRules[selected].assetType) == typeof(AudioClip))
-                {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            AudioImporter;
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRules[selected].AssetGuid)) as
-                            AudioImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
-                        
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
-
-                if (assetImporterSO == null || ruleImporterSO == null) continue; // TODO log message here
-                    
-                if (!assetRules[selected].SelectiveMode)
-                {
-                    bool equal = AssetAuditor.CompareSerializedObject(assetImporterSO, ruleImporterSO);
-
-                    elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset), affectedAsset,
-                        depth + 1, id++, true, equal, assetRules[selected].assetType));
-                }
-                else
-                {
-                    string property = assetRules[selected].SelectiveProperties[selectedSelective];
-
-                    var realname = AssetAuditor.GetPropertyNameFromDisplayName(assetImporterSO, property);
-
-                    var foundAssetSP = assetImporterSO.FindProperty(realname);
-
-                    var assetRuleSP = ruleImporterSO.FindProperty(realname);
-
-                    if (AssetAuditor.CompareSerializedProperty(foundAssetSP, assetRuleSP))
-                    {
-                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                            affectedAsset,
-                            depth + 1, id++, true, true, assetRules[selected].assetType));
-                    }
-                    else
-                    {
-                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                            affectedAsset,
-                            depth + 1, id++, true, false, assetRules[selected].assetType));
-                    }
-                }
-            }
-        }
-
-
-        private void AddChildrenRecursive(AssetAuditTreeElement parent, string dir, ref int id,
-            List<AssetAuditTreeElement>
-                _elements)
-        {
-            var child = new AssetAuditTreeElement(new DirectoryInfo(dir).Name, "", parent.depth + 1, id++, false, false,
-                AssetAuditor.AssetType.Folder);
-
-            _elements.Add(child);
-
-            var dirs = Directory.GetDirectories(dir);
-            foreach (string t in dirs)
-            {
-                if (affectedAssets.Any(affectedAsset => affectedAsset.Contains(t)))
-                {
-                    AddChildrenRecursive(child, t, ref id, _elements);
-                }
-
-                CheckAffectedAssets(_elements, t, child.depth + 1, ref id);
-            }
+            gatherDataComplete = true;
         }
 
 
         void OnSelectionChange()
         {
-            if (!m_Initialized)
-                return;
-            m_TreeView.treeModel.SetData(GetData());
-            m_TreeView.Reload();
+       //     if (!m_Initialized)
+       //         return;
+       //     m_TreeView.treeModel.SetData(GetData());
+       //     m_TreeView.Reload();
         }
 
         private void OnFocus()
@@ -307,7 +177,28 @@ namespace UnityAssetAuditor
             if (!m_Initialized)
             {
                 InitIfNeeded();
-                GUILayout.Label(" no asset rules have been found in the project");
+                if (gatherAssetsComplete && gatherDataComplete)
+                {
+                    
+
+                    // Check if it already exists (deserialized from window layout file or scriptable object)
+                   if (m_TreeViewState == null)
+                        m_TreeViewState = new TreeViewState();
+
+                    var headerState =
+                        AssetAuditTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
+                    if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
+                        MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
+                    m_MultiColumnHeaderState = headerState;
+
+                    var multiColumnHeader = new MultiColumnHeader(headerState); 
+                    Debug.Log(elements.Count);
+                    var treeModel = new TreeModel<AssetAuditTreeElement>(elements); 
+                    m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act); 
+                    GUILayout.Label(" no asset rules have been found in the project");
+
+                    m_Initialized = true;
+                }
                 return;
             }
             DoRuleSelectionGUI();
@@ -317,14 +208,13 @@ namespace UnityAssetAuditor
         }
 
         private void DoRuleSelectionGUI()
-        {
+        {   
             EditorGUI.BeginChangeCheck();
             selected = EditorGUI.Popup(ruleSelectRect, "Rule Name", selected, assetRuleNames.ToArray());
             if (EditorGUI.EndChangeCheck())
             {
                 selectedSelective = 0;
-                m_TreeView.treeModel.SetData(GetData());
-                m_TreeView.Reload();
+                GatherData();
             }
 
             // make wildcard editable and update selection from it
@@ -337,8 +227,7 @@ namespace UnityAssetAuditor
                 if (EditorGUI.EndChangeCheck())
                 {
                     assetRules[selected] = ar;
-                    m_TreeView.treeModel.SetData(GetData());
-                    m_TreeView.Reload();
+                    GatherData();
                     AssetAuditor.WriteUserData(AssetDatabase.GUIDToAssetPath(ar.AssetGuid), ar);
                 }
                 
@@ -348,49 +237,23 @@ namespace UnityAssetAuditor
                     selectedSelective = EditorGUI.Popup(SelectivePropRect, "Selective Properties", selectedSelective, ar.SelectiveProperties.ToArray());
                     if (EditorGUI.EndChangeCheck())
                     {
-                        m_TreeView.treeModel.SetData(GetData());
-                        m_TreeView.Reload();
+                        GatherData();
                     }
                 }
             }
         }
 
-        private void GatherAssetRules()
-        {
-            // clear current list
-            assetRules = new List<AssetAuditor.AssetRule>();
 
-            int progress = 0;
-            var foundAssets = AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"});
-            // get all assets in the proxyassets folder
-            foreach (var asset in foundAssets)
-            {
-                var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
-                var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
-                AssetAuditor.AssetRule ar = new AssetAuditor.AssetRule();
-                ar = JsonUtility.FromJson<AssetAuditor.AssetRule>(assetImporter.userData);
-                assetRules.Add(ar);
-
-                progress++;
-                EditorUtility.DisplayProgressBar("Gathering Asset Rules" , ar.RuleName , (float)progress/(float)foundAssets.Length);
-            }
-            
-            EditorUtility.ClearProgressBar();
-            
-            assetRuleNames.Clear();
-            foreach (var assetRule in assetRules)
-            {
-                assetRuleNames.Add(assetRule.RuleName);
-            }
-        }
 
         void SearchBar(Rect rect)
         {
+            if(treeView != null)
             treeView.searchString = SearchField.OnGUI(rect, treeView.searchString);
         }
 
         void DoTreeView(Rect rect)
         {
+            if(m_TreeView != null)
             m_TreeView.OnGUI(rect);
         }
 
@@ -500,8 +363,9 @@ namespace UnityAssetAuditor
             
             m_MultiColumnHeaderState = headerState;
             var multiColumnHeader = new MultiColumnHeader(headerState);
-            var treeModel = new TreeModel<AssetAuditTreeElement>(GetData());
-            m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act);
+            // todo move fix rule to asset auditor class
+       //     var treeModel = new TreeModel<AssetAuditTreeElement>(GetData());
+       //     m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act);
         }
 
         private static void CopySelectiveProperties(SerializedObject affectedAssetImporterSO, SerializedObject ruleImporterSO)

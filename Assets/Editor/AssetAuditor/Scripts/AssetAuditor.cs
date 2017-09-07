@@ -1,13 +1,19 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Collections;
 
 namespace UnityAssetAuditor
 {
+
+    public delegate void OnQueueComplete();
+    
     public class AssetAuditor
     {
         public static string ProxyModelPath;
@@ -20,7 +26,65 @@ namespace UnityAssetAuditor
             ProxyModelPath = "Assets/Editor/AssetAuditor/Models/DefaultAvatar.fbx";
             ProxyAudioPath = "Assets/Editor/AssetAuditor/Audio/DefaultAudio.wav";
             ProxyTexturePath = "Assets/Editor/AssetAuditor/Texture/DefaultTexture.jpg";
+            EditorApplication.update += TickEnumerator;
+            enumerableQueue = new Queue<IEnumerable<float>>();
         }
+
+        private static void TickEnumerator()
+        {
+            if (currentEnumerable == null)
+            {
+                return;
+            }
+            if (!currentEnumerator.MoveNext())
+            {
+                currentEnumerable = null;
+                currentEnumerator = null;
+
+                if (enumerableQueue.Count == 0)
+                {
+                    if (queueComplete != null) queueComplete.Invoke();
+                }
+                else
+                {
+                    currentEnumerable = enumerableQueue.Dequeue();
+                    currentEnumerator = currentEnumerable.GetEnumerator();
+                }
+            }
+        }
+
+        public static float GetProgress()
+        {
+            return currentEnumerator != null ? currentEnumerator.Current : 0f;
+        }
+
+        public static IEnumerable<float> currentEnumerable;
+
+        public static IEnumerator<float> currentEnumerator;
+
+        public static Queue<IEnumerable<float>> enumerableQueue;
+
+        public static event OnQueueComplete queueComplete;
+        
+        public static void AddEnumerator(IEnumerable<float> enumerator)
+        {
+            enumerableQueue.Enqueue(enumerator);
+
+            if (currentEnumerable == null)
+            {
+                currentEnumerable = enumerableQueue.Dequeue();
+                currentEnumerator = currentEnumerable.GetEnumerator();
+            }
+        }
+
+        public static void ClearQueue()
+        {
+            enumerableQueue.Clear();
+
+            currentEnumerable = null;
+            currentEnumerator = null;
+        }
+
         private static List<string> foundAssets;
 
         public enum WildCardMatchType
@@ -67,61 +131,316 @@ namespace UnityAssetAuditor
             }
         }
 
-        public static string[] GetAffectedAssets(AssetRule assetRule)
+        public static string[] GetAffectedAssets()
+        {
+            return foundAssets.ToArray();
+        }
+
+        public static void UpdateAffectedAssets(AssetRule assetRule)
         {
             foundAssets = new List<string>();
 
             switch (assetRule.WildCardMatchType)
             {
                 case WildCardMatchType.NameContains:
-                    DoNameContainsSearch(foundAssets, assetRule);
+                    ClearQueue();
+                    AddEnumerator(DoNameContainsSearch(foundAssets, assetRule));
                     break;
                 case WildCardMatchType.Regex:
-                    DoRegexNameSearch(foundAssets, assetRule);
+                    ClearQueue();
+                    AddEnumerator(DoRegexNameSearch(foundAssets, assetRule));
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-
-            return foundAssets.ToArray();
         }
 
 
-        private static void DoRegexNameSearch(List<string> foundAssets, AssetRule assetRule)
+        private static IEnumerable<float> DoRegexNameSearch(List<string> foundAssets, AssetRule assetRule)
         {
-            foreach (var file in Directory.GetFiles(Application.dataPath, "*", SearchOption.AllDirectories))
-            {
-                if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets")) continue;
+            var strings = Directory.GetFiles(Application.dataPath, "*", SearchOption.AllDirectories);
 
-                if (!Regex.IsMatch(file, assetRule.WildCard)) continue;
+            float progress = 0f;
+            float total = strings.Length;
+            
+            foreach (var file in strings)
+            {
+                if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets"))
+                {
+                    progress += 1;
+                    yield return progress/total;
+                    continue;
+                }
+
+                if (!Regex.IsMatch(file, assetRule.WildCard))
+                {
+                    progress += 1;
+                    yield return progress/total;
+                    continue;
+                }
 
                 var mainAssetTypeAtPath =
                     AssetDatabase.GetMainAssetTypeAtPath(file.Substring(Application.dataPath.Length - 6));
 
                 var typeFromAssetType = TypeFromAssetType(assetRule.assetType);
 
-                if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType)) continue;
+                if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType))
+                {
+                    progress += 1;
+                    yield return progress/total;
+                    continue;
+                }
 
                 foundAssets.Add(file);
+                progress += 1;
+                yield return progress/total;
+            }
+
+            AssetAuditor.foundAssets = foundAssets;
+        }
+
+        public static IEnumerable<float> DoNameContainsSearch(List<string> foundAssets, AssetRule assetRule)
+        {
+            var strings = Directory.GetFiles(Application.dataPath, "*" + assetRule.WildCard + "*",
+                SearchOption.AllDirectories);
+            
+            float progress = 0f;
+            float total = strings.Length;            
+            
+            foreach (var file in strings)
+            {
+
+                if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets"))
+                {
+                    progress += 1f;
+                    yield return progress / total;
+                    continue;
+                }
+
+                var mainAssetTypeAtPath =
+                    AssetDatabase.GetMainAssetTypeAtPath(file.Substring(Application.dataPath.Length - 6));
+
+                var typeFromAssetType = TypeFromAssetType(assetRule.assetType);
+
+                if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType))
+                {
+                    progress += 1f;
+                    yield return progress / total;
+                    continue;
+                }
+
+                foundAssets.Add(file);
+                progress += 1f;
+                yield return progress / total;
+            }
+            
+            AssetAuditor.foundAssets = foundAssets;   
+        }
+
+
+        public static IEnumerable<float> GatherAssetRules(List<AssetRule> _assetRules , List<string> _assetRuleNames )
+        {
+            int progress = 0;
+            var foundAssets = AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"});
+            // get all assets in the proxyassets folder
+            foreach (var asset in foundAssets)
+            {
+                var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
+                var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
+                AssetRule ar = new AssetRule();
+                ar = JsonUtility.FromJson<AssetRule>(assetImporter.userData);
+                _assetRules.Add(ar);
+
+                progress++;
+                yield return progress / (float)foundAssets.Length;
+            }
+            
+            _assetRuleNames.Clear();
+            foreach (var assetRule in _assetRules)
+            {
+                _assetRuleNames.Add(assetRule.RuleName);
+            }
+
+            yield return 1f;
+        }
+
+
+        public static IEnumerable<float> GatherData(AssetRule assetRule , List<AssetAuditTreeElement> elements, int selectedSelective)
+        {
+            int id = -1;
+            
+            // get the affected assets 
+           var affectedAssets = GetAffectedAssets();
+            
+            if(affectedAssets == null) Debug.Log(" null affected assets");
+
+            // build the directory tree from the affected assets
+            elements.Add(new AssetAuditTreeElement("Root", "", -1, 0, false, false, AssetType.Folder ));
+
+            // early out if there are no affected assets
+            if (affectedAssets.Length == 0)
+            {
+                Debug.Log("no affected assets ");
+                if (queueComplete != null) queueComplete.Invoke();
+                yield break;
+            }
+
+            AssetAuditTreeElement assetsFolder = new AssetAuditTreeElement("Assets", "Assets", 0, id++, false, false,
+                AssetType.Folder );
+            // add the project root "Assets" folder
+            elements.Add(assetsFolder);
+
+            if (assetsFolder.children == null) assetsFolder.children = new List<TreeElement>();
+            // search the next level down directories
+
+            var dirs = Directory.GetDirectories(Application.dataPath);
+            
+            float progress = 0f;
+            float total = dirs.Length;
+            
+            foreach (string t in dirs)
+            {
+                // check if the directory actually contais any of the assets we want to show
+                foreach (var affectedAsset in affectedAssets)
+                {
+                    if (affectedAsset.Contains(t))
+                    {
+                        AddChildrenRecursive(assetsFolder, t, ref id, elements, affectedAssets , assetRule, selectedSelective);
+                        break;
+                    }
+                }
+
+                CheckAffectedAssets(elements, t, assetsFolder.depth, ref id , affectedAssets , assetRule, selectedSelective);
+
+                progress += 1f;
+                
+                Debug.Log(progress/total);
+                yield return progress / total;
+            }
+
+            CheckAffectedAssets(elements, Application.dataPath, assetsFolder.depth, ref id, affectedAssets , assetRule, selectedSelective);
+        }
+        
+        
+        private static void AddChildrenRecursive(AssetAuditTreeElement parent, string dir, ref int id,
+            List<AssetAuditTreeElement> _elements  , string[] affectedAssets , AssetRule assetRule, int selectedSelective)
+        {
+            var child = new AssetAuditTreeElement(new DirectoryInfo(dir).Name, "", parent.depth + 1, id++, false, false,
+                AssetAuditor.AssetType.Folder);
+
+            _elements.Add(child);
+
+            var dirs = Directory.GetDirectories(dir);
+            foreach (string t in dirs)
+            {
+                if (affectedAssets.Any(affectedAsset => affectedAsset.Contains(t)))
+                {
+                    AddChildrenRecursive(child, t, ref id, _elements, affectedAssets, assetRule, selectedSelective);
+                }
+
+                CheckAffectedAssets(_elements, t, child.depth + 1, ref id , affectedAssets , assetRule, selectedSelective);
             }
         }
-
-        public static void DoNameContainsSearch(List<string> foundAssets, AssetRule assetRule)
+        
+        
+         private static void CheckAffectedAssets(List<AssetAuditTreeElement> elements, string searchDirectory, int depth,
+            ref int id , string[] affectedAssets , AssetRule assetRule, int selectedSelective)
         {
-            foreach (var file in Directory.GetFiles(Application.dataPath, "*" + assetRule.WildCard + "*",
-                SearchOption.AllDirectories))
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+                searchDirectory = searchDirectory.Replace('/', '\\');
+
+            foreach (var affectedAsset in affectedAssets)
             {
+                if (new DirectoryInfo(affectedAsset).Parent.FullName != searchDirectory) continue;
+                
+                SerializedObject assetImporterSO = null;
+                SerializedObject ruleImporterSO = null;
 
-                if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets")) continue;
+                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(Texture))
+                {
+                    var assetimporter =
+                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
+                            TextureImporter;
 
-                var mainAssetTypeAtPath =
-                    AssetDatabase.GetMainAssetTypeAtPath(file.Substring(Application.dataPath.Length - 6));
+                    // this may happen (e.g. render texture)
+                    if (assetimporter == null)
+                        continue;
 
-                var typeFromAssetType = TypeFromAssetType(assetRule.assetType);
+                    var ruleimporter =
+                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                            TextureImporter;
 
-                if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType)) continue;
+                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                        continue; // this shouldnt happen but is a nice failsafe
 
-                foundAssets.Add(file);
+                    assetImporterSO = new SerializedObject(assetimporter);
+                    ruleImporterSO = new SerializedObject(ruleimporter);
+                }
+                    
+                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(GameObject))
+                {
+                    var assetimporter =
+                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
+                            ModelImporter;
+                    var ruleimporter =
+                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                            ModelImporter;
+
+                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                        continue; // this shouldnt happen but is a nice failsafe
+
+                    assetImporterSO = new SerializedObject(assetimporter);
+                    ruleImporterSO = new SerializedObject(ruleimporter);
+                }
+
+                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(AudioClip))
+                {
+                    var assetimporter =
+                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
+                            AudioImporter;
+                    var ruleimporter =
+                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                            AudioImporter;
+
+                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                        continue; // this shouldnt happen but is a nice failsafe
+                        
+                    assetImporterSO = new SerializedObject(assetimporter);
+                    ruleImporterSO = new SerializedObject(ruleimporter);
+                }
+
+                if (assetImporterSO == null || ruleImporterSO == null) continue; // TODO log message here
+                    
+                if (!assetRule.SelectiveMode)
+                {
+                    bool equal = AssetAuditor.CompareSerializedObject(assetImporterSO, ruleImporterSO);
+
+                    elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset), affectedAsset,
+                        depth + 1, id++, true, equal, assetRule.assetType));
+                }
+                else
+                {
+                    string property = assetRule.SelectiveProperties[selectedSelective];
+
+                    var realname = GetPropertyNameFromDisplayName(assetImporterSO, property);
+
+                    var foundAssetSP = assetImporterSO.FindProperty(realname);
+
+                    var assetRuleSP = ruleImporterSO.FindProperty(realname);
+
+                    if (CompareSerializedProperty(foundAssetSP, assetRuleSP))
+                    {
+                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
+                            affectedAsset,
+                            depth + 1, id++, true, true, assetRule.assetType));
+                    }
+                    else
+                    {
+                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
+                            affectedAsset,
+                            depth + 1, id++, true, false, assetRule.assetType));
+                    }
+                }
             }
         }
 
@@ -242,7 +561,7 @@ namespace UnityAssetAuditor
             {
                 if (!CompareSerializedProperty(ruleIter, assetIter))
                 {
-                    Debug.Log(ruleIter.propertyPath + ruleIter.propertyType);
+                 //   Debug.Log(ruleIter.propertyPath + ruleIter.propertyType);
                     return false;
                 }         
 
@@ -329,7 +648,7 @@ namespace UnityAssetAuditor
             WriteUserData(newAssetPath , newRule , ref currentAsset);
         }
 
-        public static void WriteUserData(string path, AssetAuditor.AssetRule assetRule, ref string currentAsset)
+        public static void WriteUserData(string path, AssetRule assetRule, ref string currentAsset)
         {
             var assetImporter = AssetImporter.GetAtPath(path);
             assetRule.AssetGuid = AssetDatabase.AssetPathToGUID(assetImporter.assetPath);
@@ -343,7 +662,7 @@ namespace UnityAssetAuditor
             currentAsset = assetRule.AssetGuid;
         }
         
-        public static void WriteUserData(string path , AssetAuditor.AssetRule assetRule)
+        public static void WriteUserData(string path , AssetRule assetRule)
         {
             var assetImporter = AssetImporter.GetAtPath(path);
             assetRule.AssetGuid = AssetDatabase.AssetPathToGUID(assetImporter.assetPath);
@@ -355,7 +674,7 @@ namespace UnityAssetAuditor
             AssetDatabase.SaveAssets();
         }
 
-        public static bool RuleExists(AssetAuditor.AssetRule assetRule)
+        public static bool RuleExists(AssetRule assetRule)
         {
             if (!AssetDatabase.IsValidFolder("Assets/Editor/AssetAuditor/ProxyAssets"))
                 AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor", "ProxyAssets");
