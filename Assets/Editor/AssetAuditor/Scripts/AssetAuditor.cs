@@ -303,18 +303,20 @@ namespace UnityAssetAuditor
                 // check if the directory actually contais any of the assets we want to show
                 foreach (var affectedAsset in affectedAssets)
                 {
+                    float innerProgress = 0f;
                     if (affectedAsset.Contains(t))
                     {
                         AddChildrenRecursive(assetsFolder, t, ref id, elements, affectedAssets , assetRule, selectedSelective);
                         break;
                     }
+                    innerProgress += 1f;
+
+                    yield return ((innerProgress / affectedAssets.Length) / total) + (progress / total);
                 }
 
                 CheckAffectedAssets(elements, t, assetsFolder.depth, ref id , affectedAssets , assetRule, selectedSelective);
 
                 progress += 1f;
-                
-                Debug.Log(progress/total);
                 yield return progress / total;
             }
 

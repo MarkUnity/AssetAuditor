@@ -217,7 +217,7 @@ namespace UnityAssetAuditor
 
 
             Rect rt = GUILayoutUtility.GetRect(5, window.position.width-10, 18, 18);
-            EditorGUI.ProgressBar(rt,AssetAuditor.GetProgress(), "Search Progress " + (AssetAuditor.GetProgress() * 100f).ToString("0.00%"));
+            EditorGUI.ProgressBar(rt,AssetAuditor.GetProgress(), "Affected Asset Search Progress " + (AssetAuditor.GetProgress() * 100f).ToString("0.00%"));
 
             scrollPosition = GUILayout.BeginScrollView(scrollPosition);
             if (affectedAssets != null)

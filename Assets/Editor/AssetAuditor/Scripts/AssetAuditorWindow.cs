@@ -63,6 +63,11 @@ namespace UnityAssetAuditor
         {
             get { return new Rect(20f, position.height - 18f, position.width - 40f, 16f); }
         }
+        
+        Rect progressBarRect
+        {
+            get { return new Rect(20f, position.height - 36f, position.width - 40f, 16f); }
+        }
 
         Rect ruleSelectRect
         {
@@ -204,7 +209,14 @@ namespace UnityAssetAuditor
             DoRuleSelectionGUI();
             SearchBar(toolbarRect);
             DoTreeView(multiColumnTreeViewRect);
+            DoProgressBar(progressBarRect);
             BottomToolBar(bottomToolbarRect);
+        }
+
+        private void DoProgressBar(Rect rect)
+        {
+            var progress = AssetAuditor.GetProgress();
+            EditorGUI.ProgressBar(progressBarRect , progress, " Search Progress " + progress.ToString("0.00%"));
         }
 
         private void DoRuleSelectionGUI()
