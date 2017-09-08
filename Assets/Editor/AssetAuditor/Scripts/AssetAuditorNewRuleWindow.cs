@@ -225,7 +225,7 @@ namespace UnityAssetAuditor
                 foreach (string affectedAsset in affectedAssets)
                 {
                     EditorGUILayout.ObjectField(
-                        AssetDatabase.LoadAssetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6),
+                        AssetDatabase.LoadAssetAtPath(affectedAsset,
                             AssetAuditor.TypeFromAssetType(newRule.assetType)),
                         AssetAuditor.TypeFromAssetType(newRule.assetType), false);
                 }

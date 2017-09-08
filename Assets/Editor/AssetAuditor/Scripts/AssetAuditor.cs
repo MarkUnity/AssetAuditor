@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEditor;
+using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using UnityEngine.Collections;
 
@@ -155,15 +156,15 @@ namespace UnityAssetAuditor
             }
         }
 
-
+// TODO fix this
         private static IEnumerable<float> DoRegexNameSearch(List<string> foundAssets, AssetRule assetRule)
         {
-            var strings = Directory.GetFiles(Application.dataPath, "*", SearchOption.AllDirectories);
+            string[] strings = Directory.GetFiles(Application.dataPath, "*", SearchOption.AllDirectories);
 
             float progress = 0f;
             float total = strings.Length;
             
-            foreach (var file in strings)
+            foreach (string file in strings)
             {
                 if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets"))
                 {
@@ -179,10 +180,10 @@ namespace UnityAssetAuditor
                     continue;
                 }
 
-                var mainAssetTypeAtPath =
+                Type mainAssetTypeAtPath =
                     AssetDatabase.GetMainAssetTypeAtPath(file.Substring(Application.dataPath.Length - 6));
 
-                var typeFromAssetType = TypeFromAssetType(assetRule.assetType);
+                Type typeFromAssetType = TypeFromAssetType(assetRule.assetType);
 
                 if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType))
                 {
@@ -201,52 +202,43 @@ namespace UnityAssetAuditor
 
         public static IEnumerable<float> DoNameContainsSearch(List<string> foundAssets, AssetRule assetRule)
         {
-            var strings = Directory.GetFiles(Application.dataPath, "*" + assetRule.WildCard + "*",
-                SearchOption.AllDirectories);
-            
-            float progress = 0f;
-            float total = strings.Length;            
-            
-            foreach (var file in strings)
+            string type = "";
+            switch (assetRule.assetType)
             {
-
-                if (file.Contains(".meta") || file.Contains("/Editor/AssetAuditor/ProxyAssets"))
-                {
-                    progress += 1f;
-                    yield return progress / total;
-                    continue;
-                }
-
-                var mainAssetTypeAtPath =
-                    AssetDatabase.GetMainAssetTypeAtPath(file.Substring(Application.dataPath.Length - 6));
-
-                var typeFromAssetType = TypeFromAssetType(assetRule.assetType);
-
-                if (!IsSameOrBaseClass(mainAssetTypeAtPath, typeFromAssetType))
-                {
-                    progress += 1f;
-                    yield return progress / total;
-                    continue;
-                }
-
-                foundAssets.Add(file);
-                progress += 1f;
-                yield return progress / total;
+                case AssetType.Texture:
+                    type = "Texture";
+                    break;
+                case AssetType.Model:
+                    type = "GameObject";
+                    break;
+                case AssetType.Audio:
+                    type = "AudioClip";
+                    break;
+                case AssetType.Folder:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
-            
-            AssetAuditor.foundAssets = foundAssets;   
+            foreach (string findAsset in AssetDatabase.FindAssets("t:" + type + " " + assetRule.WildCard))
+            {
+                string guidToAssetPath = AssetDatabase.GUIDToAssetPath(findAsset);
+                foundAssets.Add(guidToAssetPath);
+            }
+
+            AssetAuditor.foundAssets = foundAssets;
+            yield return 1f;
         }
 
 
         public static IEnumerable<float> GatherAssetRules(List<AssetRule> _assetRules , List<string> _assetRuleNames )
         {
             int progress = 0;
-            var foundAssets = AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"});
+            string[] foundAssets = AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"});
             // get all assets in the proxyassets folder
-            foreach (var asset in foundAssets)
+            foreach (string asset in foundAssets)
             {
-                var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
-                var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
+                string guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
+                AssetImporter assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
                 AssetRule ar = new AssetRule();
                 ar = JsonUtility.FromJson<AssetRule>(assetImporter.userData);
                 _assetRules.Add(ar);
@@ -256,7 +248,7 @@ namespace UnityAssetAuditor
             }
             
             _assetRuleNames.Clear();
-            foreach (var assetRule in _assetRules)
+            foreach (AssetRule assetRule in _assetRules)
             {
                 _assetRuleNames.Add(assetRule.RuleName);
             }
@@ -270,7 +262,7 @@ namespace UnityAssetAuditor
             int id = -1;
             
             // get the affected assets 
-           var affectedAssets = GetAffectedAssets();
+           string[] affectedAssets = GetAffectedAssets();
             
             if(affectedAssets == null) Debug.Log(" null affected assets");
 
@@ -289,178 +281,135 @@ namespace UnityAssetAuditor
                 AssetType.Folder );
             // add the project root "Assets" folder
             elements.Add(assetsFolder);
-
+            
             if (assetsFolder.children == null) assetsFolder.children = new List<TreeElement>();
-            // search the next level down directories
-
-            var dirs = Directory.GetDirectories(Application.dataPath);
-            
-            float progress = 0f;
-            float total = dirs.Length;
-            
-            foreach (string t in dirs)
-            {
-                // check if the directory actually contais any of the assets we want to show
-                foreach (var affectedAsset in affectedAssets)
-                {
-                    float innerProgress = 0f;
-                    if (affectedAsset.Contains(t))
-                    {
-                        AddChildrenRecursive(assetsFolder, t, ref id, elements, affectedAssets , assetRule, selectedSelective);
-                        break;
-                    }
-                    innerProgress += 1f;
-
-                    yield return ((innerProgress / affectedAssets.Length) / total) + (progress / total);
-                }
-
-                CheckAffectedAssets(elements, t, assetsFolder.depth, ref id , affectedAssets , assetRule, selectedSelective);
-
-                progress += 1f;
-                yield return progress / total;
-            }
-
-            CheckAffectedAssets(elements, Application.dataPath, assetsFolder.depth, ref id, affectedAssets , assetRule, selectedSelective);
-        }
-        
-        
-        private static void AddChildrenRecursive(AssetAuditTreeElement parent, string dir, ref int id,
-            List<AssetAuditTreeElement> _elements  , string[] affectedAssets , AssetRule assetRule, int selectedSelective)
-        {
-            var child = new AssetAuditTreeElement(new DirectoryInfo(dir).Name, "", parent.depth + 1, id++, false, false,
-                AssetAuditor.AssetType.Folder);
-
-            _elements.Add(child);
-
-            var dirs = Directory.GetDirectories(dir);
-            foreach (string t in dirs)
-            {
-                if (affectedAssets.Any(affectedAsset => affectedAsset.Contains(t)))
-                {
-                    AddChildrenRecursive(child, t, ref id, _elements, affectedAssets, assetRule, selectedSelective);
-                }
-
-                CheckAffectedAssets(_elements, t, child.depth + 1, ref id , affectedAssets , assetRule, selectedSelective);
-            }
-        }
-        
-        
-         private static void CheckAffectedAssets(List<AssetAuditTreeElement> elements, string searchDirectory, int depth,
-            ref int id , string[] affectedAssets , AssetRule assetRule, int selectedSelective)
-        {
-            if (Application.platform == RuntimePlatform.WindowsEditor)
-                searchDirectory = searchDirectory.Replace('/', '\\');
 
             foreach (var affectedAsset in affectedAssets)
             {
-                if (new DirectoryInfo(affectedAsset).Parent.FullName != searchDirectory) continue;
-                
-                SerializedObject assetImporterSO = null;
-                SerializedObject ruleImporterSO = null;
-
-                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(Texture))
+                // split the path 
+                string path = affectedAsset.Substring(7);
+                var strings = path.Split(new[]{'/'}, StringSplitOptions.None);
+                int depth = 1;
+                // the first entries have lower depth
+                for(int i = 0 ; i < strings.Length ; i++)
                 {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            TextureImporter;
-
-                    // this may happen (e.g. render texture)
-                    if (assetimporter == null)
-                        continue;
-
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
-                            TextureImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
-
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
+                    string projectPath =
+                        affectedAsset.Substring(0, affectedAsset.IndexOf(strings[i]) + strings[i].Length);
                     
-                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(GameObject))
-                {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            ModelImporter;
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
-                            ModelImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
-
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
-
-                if (AssetAuditor.TypeFromAssetType(assetRule.assetType) == typeof(AudioClip))
-                {
-                    var assetimporter =
-                        AssetImporter.GetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6)) as
-                            AudioImporter;
-                    var ruleimporter =
-                        AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
-                            AudioImporter;
-
-                    if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
-                        continue; // this shouldnt happen but is a nice failsafe
+                    // the last element is the asset itself
+                    if (i == strings.Length-1)
+                    {
+                       var result = CheckAffectedAsset(affectedAsset, assetRule, selectedSelective);
+                       var element =  new AssetAuditTreeElement(strings[i], projectPath, i + 1, id + 1, true, result,
+                            assetRule.assetType); 
                         
-                    assetImporterSO = new SerializedObject(assetimporter);
-                    ruleImporterSO = new SerializedObject(ruleimporter);
-                }
-
-                if (assetImporterSO == null || ruleImporterSO == null) continue; // TODO log message here
-                    
-                if (!assetRule.SelectiveMode)
-                {
-                    bool equal = AssetAuditor.CompareSerializedObject(assetImporterSO, ruleImporterSO);
-
-                    elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset), affectedAsset,
-                        depth + 1, id++, true, equal, assetRule.assetType));
-                }
-                else
-                {
-                    string property = assetRule.SelectiveProperties[selectedSelective];
-
-                    var realname = GetPropertyNameFromDisplayName(assetImporterSO, property);
-
-                    var foundAssetSP = assetImporterSO.FindProperty(realname);
-
-                    var assetRuleSP = ruleImporterSO.FindProperty(realname);
-
-                    if (CompareSerializedProperty(foundAssetSP, assetRuleSP))
-                    {
-                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                            affectedAsset,
-                            depth + 1, id++, true, true, assetRule.assetType));
+                        elements.Add(element);
+                        depth++;
+                        continue;
                     }
-                    else
+                    
+                    if (!elements.Exists(element => element.name == strings[i] && element.projectPath == projectPath))
                     {
-                        elements.Add(new AssetAuditTreeElement(Path.GetFileName(affectedAsset),
-                            affectedAsset,
-                            depth + 1, id++, true, false, assetRule.assetType));
+                        var assetAuditTreeElement = new AssetAuditTreeElement(strings[i], projectPath, i+1 , id+1, false, false, AssetType.Folder);
+                        elements.Add(assetAuditTreeElement);
+                        id++;
+                        depth++; 
                     }
                 }
             }
+        }
+ 
+
+        private static bool CheckAffectedAsset(string affectedAsset, AssetRule assetRule, int selectedSelective)
+        {
+            SerializedObject assetImporterSO = null;
+            SerializedObject ruleImporterSO = null;
+
+            if (TypeFromAssetType(assetRule.assetType) == typeof(Texture))
+            {
+                TextureImporter assetimporter =
+                    AssetImporter.GetAtPath(affectedAsset) as
+                        TextureImporter;
+
+                // this may happen (e.g. render texture)
+                if (assetimporter == null)
+                    return false;
+
+                TextureImporter ruleimporter =
+                    AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                        TextureImporter;
+
+                if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                    return false; // this shouldnt happen but is a nice failsafe
+
+                assetImporterSO = new SerializedObject(assetimporter);
+                ruleImporterSO = new SerializedObject(ruleimporter);
+            }
+
+            if (TypeFromAssetType(assetRule.assetType) == typeof(GameObject))
+            {
+                ModelImporter assetimporter =
+                    AssetImporter.GetAtPath(affectedAsset) as
+                        ModelImporter;
+                ModelImporter ruleimporter =
+                    AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                        ModelImporter;
+
+                if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                    return false; // this shouldnt happen but is a nice failsafe
+
+                assetImporterSO = new SerializedObject(assetimporter);
+                ruleImporterSO = new SerializedObject(ruleimporter);
+            }
+
+            if (TypeFromAssetType(assetRule.assetType) == typeof(AudioClip))
+            {
+                AudioImporter assetimporter =
+                    AssetImporter.GetAtPath(affectedAsset) as
+                        AudioImporter;
+                AudioImporter ruleimporter =
+                    AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid)) as
+                        AudioImporter;
+
+                if (assetimporter.GetInstanceID() == ruleimporter.GetInstanceID())
+                    return false; // this shouldnt happen but is a nice failsafe
+
+                assetImporterSO = new SerializedObject(assetimporter);
+                ruleImporterSO = new SerializedObject(ruleimporter);
+            }
+
+            if (assetImporterSO == null || ruleImporterSO == null) return false; // TODO log message here
+
+            if (!assetRule.SelectiveMode)
+            {
+                return CompareSerializedObject(assetImporterSO, ruleImporterSO);
+            }
+            string property = assetRule.SelectiveProperties[selectedSelective];
+
+            string realname = GetPropertyNameFromDisplayName(assetImporterSO, property);
+
+            SerializedProperty foundAssetSP = assetImporterSO.FindProperty(realname);
+
+            SerializedProperty assetRuleSP = ruleImporterSO.FindProperty(realname);
+
+            return CompareSerializedProperty(foundAssetSP, assetRuleSP);
         }
 
         public static bool CompareSerializedProperty(SerializedProperty foundAssetSp, SerializedProperty assetRuleSp)
         {
 
-            if (foundAssetSp.propertyPath == "m_FileIDToRecycleName") return true; // the file ids will always be different so we should skip over this. 
+            if (foundAssetSp.propertyPath == "m_FileIDToRecycleName" || foundAssetSp.propertyPath == "m_UserData") return true; // the file ids will always be different so we should skip over this. The user data is where the asset rule info is stored so we dont want to check that
             
             switch (foundAssetSp.propertyType)
             {
                 case SerializedPropertyType.Generic: // this eventually goes down through the data until we get a useable value to compare 
 
-                    var foundAssetsSPCopy = foundAssetSp.Copy();
-                    var assetRuleSPCopy = assetRuleSp.Copy();
+                    SerializedProperty foundAssetsSPCopy = foundAssetSp.Copy();
+                    SerializedProperty assetRuleSPCopy = assetRuleSp.Copy();
 
                     // we must get the next sibling SerializedProperties to know when to stop the comparison
-                    var nextSiblingAssetSP = foundAssetSp.Copy ();
-                    var nextSiblingRuleSP = assetRuleSp.Copy ();
+                    SerializedProperty nextSiblingAssetSP = foundAssetSp.Copy ();
+                    SerializedProperty nextSiblingRuleSP = assetRuleSp.Copy ();
                     nextSiblingAssetSP.NextVisible (false);
                     nextSiblingRuleSP.NextVisible (false);
 
@@ -554,8 +503,8 @@ namespace UnityAssetAuditor
 
         public static bool CompareSerializedObject(SerializedObject rule, SerializedObject asset)
         {
-            var ruleIter = rule.GetIterator();
-            var assetIter = asset.GetIterator();
+            SerializedProperty ruleIter = rule.GetIterator();
+            SerializedProperty assetIter = asset.GetIterator();
             assetIter.NextVisible(true);
             ruleIter.NextVisible(true);
 
@@ -563,7 +512,7 @@ namespace UnityAssetAuditor
             {
                 if (!CompareSerializedProperty(ruleIter, assetIter))
                 {
-                 //   Debug.Log(ruleIter.propertyPath + ruleIter.propertyType);
+                    Debug.Log(" failied property " + ruleIter.propertyPath + "  " + assetIter.displayName);
                     return false;
                 }         
 
@@ -572,14 +521,123 @@ namespace UnityAssetAuditor
 
             return true;
         }
+        
+        
+        public static IEnumerable<float> FixAll(AssetAuditTreeView treeView , AssetRule assetRule)
+        {
+            List<AssetAuditTreeElement> list = new List<AssetAuditTreeElement>();
+            TreeElementUtility.TreeToList(treeView.treeModel.root, list);
+
+            float progress = 0f;
+            
+            foreach (AssetAuditTreeElement assetAuditTreeElement in list)
+            {
+                if (assetAuditTreeElement.isAsset && !assetAuditTreeElement.conforms)
+                    FixRule(assetAuditTreeElement, assetRule);
+
+                progress += 1f;
+                yield return progress / list.Count;
+            }
+        }
+
+        public static void FixRule(AssetAuditTreeElement data , AssetRule assetRule)
+        {
+
+            string ruleAssetPath = AssetDatabase.GUIDToAssetPath(assetRule.AssetGuid);
+            string affectedAssetPath = data.projectPath;
+
+            switch (data.assetType)
+            {
+                case AssetType.Texture:
+                
+                    TextureImporter ruleTexImporter = AssetImporter.GetAtPath(ruleAssetPath) as TextureImporter;
+                    TextureImporter affectedAssetTexImporter = AssetImporter.GetAtPath(affectedAssetPath) as TextureImporter;
+
+                    if (assetRule.SelectiveMode)
+                    {
+                        SerializedObject ruleImporterSO = new SerializedObject(ruleTexImporter);
+                        SerializedObject affectedAssetImporterSO = new SerializedObject(affectedAssetTexImporter);
+                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO, assetRule);
+                    }
+                    else
+                    {
+                        EditorUtility.CopySerialized(ruleTexImporter, affectedAssetTexImporter);
+                    }
+                    affectedAssetTexImporter.userData = "";
+                    affectedAssetTexImporter.SaveAndReimport();
+                
+                    break;
+
+                case AssetType.Model:
+                    
+                    ModelImporter ruleModelImporter = AssetImporter.GetAtPath(ruleAssetPath) as ModelImporter;
+                    ModelImporter affectedAssetModelImporter = AssetImporter.GetAtPath(affectedAssetPath) as ModelImporter;
+
+                    if (assetRule.SelectiveMode)
+                    {
+                        SerializedObject ruleImporterSO = new SerializedObject(ruleModelImporter);
+                        SerializedObject affectedAssetImporterSO = new SerializedObject(affectedAssetModelImporter);
+                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO, assetRule);
+                    }
+                    else
+                    {
+                        EditorUtility.CopySerialized(ruleModelImporter, affectedAssetModelImporter);
+                    }
+                    affectedAssetModelImporter.userData = "";
+                    affectedAssetModelImporter.SaveAndReimport();
+                    break;
+                    
+                case AssetType.Audio:
+                    
+                    AudioImporter ruleAudioImporter = AssetImporter.GetAtPath(ruleAssetPath) as AudioImporter;
+                    AudioImporter affectedAssetAudioImporter = AssetImporter.GetAtPath(affectedAssetPath) as AudioImporter;
+
+                    if (assetRule.SelectiveMode)
+                    {
+                        SerializedObject ruleImporterSO = new SerializedObject(ruleAudioImporter);
+                        SerializedObject affectedAssetImporterSO = new SerializedObject(affectedAssetAudioImporter);
+                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO, assetRule);
+                    }
+                    else
+                    {
+                        EditorUtility.CopySerialized(ruleAudioImporter, affectedAssetAudioImporter);
+                    }
+                    affectedAssetAudioImporter.userData = "";
+                    affectedAssetAudioImporter.SaveAndReimport();
+                    break;
+                case AssetType.Folder:
+                    break;
+                    
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            data.conforms = true;
+        }
+        
+        private static void CopySelectiveProperties(SerializedObject affectedAssetImporterSO, SerializedObject ruleImporterSO, AssetRule assetRule)
+        {
+            foreach (string property in assetRule.SelectiveProperties)
+            {
+                string realname = AssetAuditor.GetPropertyNameFromDisplayName(affectedAssetImporterSO, property);
+
+                SerializedProperty assetRuleSP = ruleImporterSO.FindProperty(realname);
+
+                affectedAssetImporterSO.CopyFromSerializedProperty(assetRuleSP);
+
+                bool applyModifiedProperties = affectedAssetImporterSO.ApplyModifiedProperties();
+
+                if (!applyModifiedProperties) Debug.Log(" copy failed ");
+            }
+        }
 
         public static bool HaveEqualProperties<T>(T rhs, T lhs)
         {
             if (rhs != null && lhs != null)
             {
                 Type type = typeof(T);
-                foreach (System.Reflection.PropertyInfo pi in type.GetProperties(
-                    System.Reflection.BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+                foreach (PropertyInfo pi in type.GetProperties(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
                 {
                     object rhsValue = type.GetProperty(pi.Name).GetValue(rhs, null);
                     object lhsValue = type.GetProperty(pi.Name).GetValue(lhs, null);
@@ -594,7 +652,7 @@ namespace UnityAssetAuditor
         
         public static string GetPropertyNameFromDisplayName(SerializedObject so, string displayName)
         {
-            var iter = so.GetIterator();
+            SerializedProperty iter = so.GetIterator();
 
             iter.NextVisible(true);
             
@@ -609,7 +667,7 @@ namespace UnityAssetAuditor
         
         public static string[] GetPropertyNames(SerializedObject so)
         {
-            var soIter = so.GetIterator();
+            SerializedProperty soIter = so.GetIterator();
 
             List<string> propNames = new List<string>();
 
@@ -652,7 +710,7 @@ namespace UnityAssetAuditor
 
         public static void WriteUserData(string path, AssetRule assetRule, ref string currentAsset)
         {
-            var assetImporter = AssetImporter.GetAtPath(path);
+            AssetImporter assetImporter = AssetImporter.GetAtPath(path);
             assetRule.AssetGuid = AssetDatabase.AssetPathToGUID(assetImporter.assetPath);
 
             assetImporter.userData = JsonUtility.ToJson(assetRule);
@@ -666,7 +724,7 @@ namespace UnityAssetAuditor
         
         public static void WriteUserData(string path , AssetRule assetRule)
         {
-            var assetImporter = AssetImporter.GetAtPath(path);
+            AssetImporter assetImporter = AssetImporter.GetAtPath(path);
             assetRule.AssetGuid = AssetDatabase.AssetPathToGUID(assetImporter.assetPath);
 
             assetImporter.userData = JsonUtility.ToJson(assetRule);
@@ -681,13 +739,13 @@ namespace UnityAssetAuditor
             if (!AssetDatabase.IsValidFolder("Assets/Editor/AssetAuditor/ProxyAssets"))
                 AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor", "ProxyAssets");
             
-            foreach (var asset in AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"}))
+            foreach (string asset in AssetDatabase.FindAssets("", new[] {"Assets/Editor/AssetAuditor/ProxyAssets"}))
             {
-                var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
-                var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
+                string guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
+                AssetImporter assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
 
-                AssetAuditor.AssetRule ar = new AssetAuditor.AssetRule();
-                ar = JsonUtility.FromJson<AssetAuditor.AssetRule>(assetImporter.userData);
+                AssetRule ar = new AssetRule();
+                ar = JsonUtility.FromJson<AssetRule>(assetImporter.userData);
                 if (ar.RuleName == assetRule.RuleName && ar.WildCard == assetRule.WildCard &&
                     ar.WildCardMatchType == assetRule.WildCardMatchType) return true;
             }

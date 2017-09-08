@@ -51,7 +51,7 @@ namespace UnityAssetAuditor
 
         Rect multiColumnTreeViewRect
         {
-            get { return new Rect(20, 90, position.width - 40, position.height - 60); }
+            get { return new Rect(20, 90, position.width - 40, position.height - 130); }
         }
 
         Rect toolbarRect
@@ -105,6 +105,15 @@ namespace UnityAssetAuditor
             }
         }
 
+        private void  FixRule(AssetAuditTreeElement assetAuditTreeElement)
+        {
+            AssetAuditor.FixRule(assetAuditTreeElement , assetRules[selected]);
+
+            elements = new List<AssetAuditTreeElement>();
+            AssetAuditor.queueComplete += OnGatherDataComplete;
+            AssetAuditor.AddEnumerator(AssetAuditor.GatherData(assetRules[selected], elements , selectedSelective));
+        }
+
 
         void GatherAssetRules()
         {
@@ -136,13 +145,12 @@ namespace UnityAssetAuditor
             AssetAuditor.ClearQueue();
             AssetAuditor.UpdateAffectedAssets(assetRules[selected]);
             AssetAuditor.AddEnumerator(AssetAuditor.GatherData(assetRules[selected],elements,selectedSelective));  
+            
         }
         
         private void OnGatherDataComplete()
         {
             AssetAuditor.queueComplete -= OnGatherDataComplete;
-
-           // elements = tempElements;
 
             if (m_Initialized)
             {
@@ -197,7 +205,6 @@ namespace UnityAssetAuditor
                     m_MultiColumnHeaderState = headerState;
 
                     var multiColumnHeader = new MultiColumnHeader(headerState); 
-                    Debug.Log(elements.Count);
                     var treeModel = new TreeModel<AssetAuditTreeElement>(elements); 
                     m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act); 
                     GUILayout.Label(" no asset rules have been found in the project");
@@ -284,117 +291,10 @@ namespace UnityAssetAuditor
             if (GUI.Button(new Rect(rect.x + ((rect.width / 3) * 2), rect.y, rect.width / 3, rect.height), "Fix All",
                 style))
             {
-                FixAll();
+                AssetAuditor.AddEnumerator(AssetAuditor.FixAll(m_TreeView , assetRules[selected]));
             }
         }
 
-        private void FixAll()
-        {
-            List<AssetAuditTreeElement> list = new List<AssetAuditTreeElement>();
-            TreeElementUtility.TreeToList(m_TreeView.treeModel.root, list);
-            foreach (var assetAuditTreeElement in list)
-            {
-                if (assetAuditTreeElement.isAsset && !assetAuditTreeElement.conforms)
-                    FixRule(assetAuditTreeElement);
-            }
-        }
-
-        public void FixRule(AssetAuditTreeElement data)
-        {
-
-            string ruleAssetPath = AssetDatabase.GUIDToAssetPath(assetRules[selected].AssetGuid);
-            string affectedAssetPath = data.projectPath.Substring(Application.dataPath.Length - 6);
-
-            switch (data.assetType)
-            {
-                case AssetAuditor.AssetType.Texture:
-                
-                    var ruleTexImporter = AssetImporter.GetAtPath(ruleAssetPath) as TextureImporter;
-                    var affectedAssetTexImporter = AssetImporter.GetAtPath(affectedAssetPath) as TextureImporter;
-
-                    if (assetRules[selected].SelectiveMode)
-                    {
-                        var ruleImporterSO = new SerializedObject(ruleTexImporter);
-                        var affectedAssetImporterSO = new SerializedObject(affectedAssetTexImporter);
-                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO);
-                    }
-                    else
-                    {
-                        EditorUtility.CopySerialized(ruleTexImporter, affectedAssetTexImporter);
-                    }
-                    affectedAssetTexImporter.SaveAndReimport();
-                
-                    break;
-
-                case AssetAuditor.AssetType.Model:
-                    
-                    var ruleModelImporter = AssetImporter.GetAtPath(ruleAssetPath) as ModelImporter;
-                    var affectedAssetModelImporter = AssetImporter.GetAtPath(affectedAssetPath) as ModelImporter;
-
-                    if (assetRules[selected].SelectiveMode)
-                    {
-                        var ruleImporterSO = new SerializedObject(ruleModelImporter);
-                        var affectedAssetImporterSO = new SerializedObject(affectedAssetModelImporter);
-                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO);
-                    }
-                    else
-                    {
-                        EditorUtility.CopySerialized(ruleModelImporter, affectedAssetModelImporter);
-                    }
-                    affectedAssetModelImporter.SaveAndReimport();
-                    break;
-                    
-                case AssetAuditor.AssetType.Audio:
-                    
-                    var ruleAudioImporter = AssetImporter.GetAtPath(ruleAssetPath) as AudioImporter;
-                    var affectedAssetAudioImporter = AssetImporter.GetAtPath(affectedAssetPath) as AudioImporter;
-
-                    if (assetRules[selected].SelectiveMode)
-                    {
-                        var ruleImporterSO = new SerializedObject(ruleAudioImporter);
-                        var affectedAssetImporterSO = new SerializedObject(affectedAssetAudioImporter);
-                        CopySelectiveProperties(affectedAssetImporterSO, ruleImporterSO);
-                    }
-                    else
-                    {
-                        EditorUtility.CopySerialized(ruleAudioImporter, affectedAssetAudioImporter);
-                    }
-                    affectedAssetAudioImporter.SaveAndReimport();
-                    break;
-                case AssetAuditor.AssetType.Folder:
-                    break;
-                    
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-            
-            var headerState = AssetAuditTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
-            
-            if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
-                MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
-            
-            m_MultiColumnHeaderState = headerState;
-            var multiColumnHeader = new MultiColumnHeader(headerState);
-            // todo move fix rule to asset auditor class
-       //     var treeModel = new TreeModel<AssetAuditTreeElement>(GetData());
-       //     m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act);
-        }
-
-        private static void CopySelectiveProperties(SerializedObject affectedAssetImporterSO, SerializedObject ruleImporterSO)
-        {
-            foreach (string property in assetRules[selected].SelectiveProperties)
-            {
-                var realname = AssetAuditor.GetPropertyNameFromDisplayName(affectedAssetImporterSO, property);
-
-                var assetRuleSP = ruleImporterSO.FindProperty(realname);
-
-                affectedAssetImporterSO.CopyFromSerializedProperty(assetRuleSP);
-
-                var applyModifiedProperties = affectedAssetImporterSO.ApplyModifiedProperties();
-
-                if (!applyModifiedProperties) Debug.Log(" copy failed ");
-            }
-        }
     }
 
     internal static class SearchField
