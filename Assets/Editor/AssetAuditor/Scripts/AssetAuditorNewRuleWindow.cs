@@ -25,6 +25,8 @@ namespace UnityAssetAuditor
 
         private static string UnityProxyAssetFolder = "Assets/Editor/AssetAuditor/ProxyAssets";
         private static string ProxyAssetFolder;
+        
+        
 
 
         [MenuItem("Asset Auditing/New Audit Rule")]
@@ -43,6 +45,16 @@ namespace UnityAssetAuditor
 
             UpdateExistingRules();
             scrollPosition = Vector2.zero;
+
+            AssetAuditor.queueComplete += AffectedAssetSearchComplete;
+
+        }
+
+        private static void AffectedAssetSearchComplete()
+        {
+            affectedAssets = AssetAuditor.GetAffectedAssets();
+            window.Repaint();
+            AssetAuditor.queueComplete -= AffectedAssetSearchComplete;
         }
 
 
@@ -115,7 +127,8 @@ namespace UnityAssetAuditor
             newRule.WildCard = EditorGUILayout.TextField("Wild Card: ", newRule.WildCard);
             if (EditorGUI.EndChangeCheck())
             {
-                affectedAssets = AssetAuditor.GetAffectedAssets(newRule);
+                AssetAuditor.queueComplete += AffectedAssetSearchComplete;
+                AssetAuditor.UpdateAffectedAssets(newRule);
             }
 
 
@@ -137,7 +150,8 @@ namespace UnityAssetAuditor
                     newRule.SelectiveProperties[i] = propertyNames[EditorGUILayout.Popup(SelectedFromList(propertyNames , newRule.SelectiveProperties[i]), propertyNames)];
                     if (EditorGUI.EndChangeCheck())
                     {
-                        affectedAssets = AssetAuditor.GetAffectedAssets(newRule);
+                        AssetAuditor.queueComplete += AffectedAssetSearchComplete;
+                        AssetAuditor.UpdateAffectedAssets(newRule);
                     }
 
                     EditorGUILayout.EndHorizontal();
@@ -164,7 +178,8 @@ namespace UnityAssetAuditor
             if (EditorGUI.EndChangeCheck())
             {
                 newRule.SelectiveProperties = new List<string>();
-                affectedAssets = AssetAuditor.GetAffectedAssets(newRule);
+                AssetAuditor.queueComplete += AffectedAssetSearchComplete;
+                AssetAuditor.UpdateAffectedAssets(newRule);
             }
             
             if (!AssetAuditor.RuleExists(newRule))
@@ -187,7 +202,8 @@ namespace UnityAssetAuditor
                     }
 
                     UpdateExistingRules();
-                    affectedAssets = AssetAuditor.GetAffectedAssets(assetRules[selected]);
+                    AssetAuditor.queueComplete += AffectedAssetSearchComplete;
+                    AssetAuditor.UpdateAffectedAssets(assetRules[selected]);
                 }
             }
             else
@@ -197,7 +213,11 @@ namespace UnityAssetAuditor
 
             GUILayout.Space(20);
             GUILayout.Label("Affect Assets Preview");
-            GUILayout.Space(20);
+            GUILayout.Space(5);
+
+
+            Rect rt = GUILayoutUtility.GetRect(5, window.position.width-10, 18, 18);
+            EditorGUI.ProgressBar(rt,AssetAuditor.GetProgress(), "Affected Asset Search Progress " + (AssetAuditor.GetProgress() * 100f).ToString("0.00%"));
 
             scrollPosition = GUILayout.BeginScrollView(scrollPosition);
             if (affectedAssets != null)
@@ -205,7 +225,7 @@ namespace UnityAssetAuditor
                 foreach (string affectedAsset in affectedAssets)
                 {
                     EditorGUILayout.ObjectField(
-                        AssetDatabase.LoadAssetAtPath(affectedAsset.Substring(Application.dataPath.Length - 6),
+                        AssetDatabase.LoadAssetAtPath(affectedAsset,
                             AssetAuditor.TypeFromAssetType(newRule.assetType)),
                         AssetAuditor.TypeFromAssetType(newRule.assetType), false);
                 }
@@ -261,10 +281,6 @@ namespace UnityAssetAuditor
         {
             newRule.SelectiveProperties.Add(AssetAuditor.GetPropertyNames(GetSerializedObject(newRule.assetType))[0]);
         }
-
-
-
-
 
     }
 }

@@ -3,7 +3,7 @@ using System;
 namespace UnityAssetAuditor
 {
 	[Serializable]
-	internal class AssetAuditTreeElement : TreeElement
+	public class AssetAuditTreeElement : TreeElement
     { 
 		public bool isAsset;
 	    public string projectPath;
