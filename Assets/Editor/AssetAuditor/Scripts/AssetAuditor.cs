@@ -283,7 +283,7 @@ namespace UnityAssetAuditor
             elements.Add(assetsFolder);
             
             if (assetsFolder.children == null) assetsFolder.children = new List<TreeElement>();
-
+            float progress = 0f;
             foreach (var affectedAsset in affectedAssets)
             {
                 // split the path 
@@ -316,6 +316,8 @@ namespace UnityAssetAuditor
                         depth++; 
                     }
                 }
+                progress += 1f;
+                yield return progress / affectedAssets.Length;
             }
         }
  
@@ -425,7 +427,6 @@ namespace UnityAssetAuditor
                         {
                             if (!CompareSerializedProperty(foundAssetsSPCopy, assetRuleSPCopy))
                             {
-                                Debug.Log(foundAssetsSPCopy.propertyPath + foundAssetsSPCopy.propertyType);
                                 return false;
                             }
                         }
