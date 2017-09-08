@@ -37,6 +37,7 @@ namespace UnityAssetAuditor
             {
                 return;
             }
+
             if (!currentEnumerator.MoveNext())
             {
                 currentEnumerable = null;
@@ -289,12 +290,11 @@ namespace UnityAssetAuditor
                 // split the path 
                 string path = affectedAsset.Substring(7);
                 var strings = path.Split(new[]{'/'}, StringSplitOptions.None);
-                int depth = 1;
+                string projectPath = "Assets";
                 // the first entries have lower depth
                 for(int i = 0 ; i < strings.Length ; i++)
                 {
-                    string projectPath =
-                        affectedAsset.Substring(0, affectedAsset.IndexOf(strings[i]) + strings[i].Length);
+                    projectPath += "/" + strings[i];
                     
                     // the last element is the asset itself
                     if (i == strings.Length-1)
@@ -304,16 +304,13 @@ namespace UnityAssetAuditor
                             assetRule.assetType); 
                         
                         elements.Add(element);
-                        depth++;
-                        continue;
+                        id++;
                     }
-                    
-                    if (!elements.Exists(element => element.name == strings[i] && element.projectPath == projectPath))
+                    else if (!elements.Exists(element => element.name == strings[i] && element.projectPath == projectPath))
                     {
                         var assetAuditTreeElement = new AssetAuditTreeElement(strings[i], projectPath, i+1 , id+1, false, false, AssetType.Folder);
                         elements.Add(assetAuditTreeElement);
                         id++;
-                        depth++; 
                     }
                 }
                 progress += 1f;
