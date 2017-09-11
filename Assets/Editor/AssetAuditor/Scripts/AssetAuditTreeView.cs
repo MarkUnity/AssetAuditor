@@ -8,7 +8,7 @@ using UnityEngine.Assertions;
 
 namespace UnityAssetAuditor
 {
-    internal class AssetAuditTreeView : TreeViewWithTreeModel<AssetAuditTreeElement>
+    public class AssetAuditTreeView : TreeViewWithTreeModel<AssetAuditTreeElement>
     {
         private readonly Action<AssetAuditTreeElement> _ruleFixEvent;
         const float kRowHeights = 20f;
@@ -117,7 +117,7 @@ namespace UnityAssetAuditor
                             case AssetAuditor.AssetType.Texture:
                                 iconTex = AssetPreview.GetMiniThumbnail(
                                     AssetDatabase.LoadAssetAtPath<Texture2D>(
-                                        item.data.projectPath.Substring(Application.dataPath.Length - 6)));
+                                        item.data.projectPath));
                                 break;
                             case AssetAuditor.AssetType.Model:
                                 iconTex = EditorGUIUtility.FindTexture("PrefabModel Icon");
