@@ -42,6 +42,7 @@ namespace UnityAssetAuditor
             GatheringRules,
             GatheringData,
             Initialized,
+            NoAssetRules
         }
 
         [NonSerialized]
@@ -124,7 +125,16 @@ namespace UnityAssetAuditor
         private void OnGatherAssetRulesComplete()
         {
             AssetAuditor.queueComplete -= OnGatherAssetRulesComplete;
-            gatherAssetsComplete = true;
+
+            if (assetRules.Count > 0)
+            {
+                gatherAssetsComplete = true;
+            }
+            else
+            {
+                gatherAssetsComplete = false;
+                state = State.NoAssetRules;
+            }
         }
 
 
@@ -222,9 +232,25 @@ namespace UnityAssetAuditor
                     DoTreeView(multiColumnTreeViewRect);
                     BottomToolBar(bottomToolbarRect);
                     break;
+                    
+                case State.NoAssetRules:
+                    DoNoAssetRuleGUI();
+                    break;
+                        
             }
                     
             DoProgressBar(progressBarRect);
+        }
+
+        private void DoNoAssetRuleGUI()
+        {
+            GUILayout.Label(" No Asset Rules Are Present In The Project ");
+
+            if (GUILayout.Button("Search Again For Assets ")) /// TODO add directory to string for proxy asset path
+            {
+                GatherAssetRules();
+                state = State.GatheringRules;
+            }
         }
 
         private void DoProgressBar(Rect rect)
