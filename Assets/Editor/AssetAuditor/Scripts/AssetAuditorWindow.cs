@@ -16,8 +16,6 @@ namespace UnityAssetAuditor
     
     class AssetAuditorWindow : EditorWindow
     {
-        [NonSerialized] bool m_Initialized;
-
         [SerializeField]
         static TreeViewState m_TreeViewState; // Serialized in the window layout file so it survives assembly reloading
 
@@ -37,6 +35,17 @@ namespace UnityAssetAuditor
         private bool gatherAssetsComplete;
         private bool gatherDataComplete;
         private List<AssetAuditTreeElement> tempElements;
+
+        private enum State
+        {
+            Uninitialized,
+            GatheringRules,
+            GatheringData,
+            Initialized,
+        }
+
+        [NonSerialized]
+        private State state = State.Uninitialized;
 
 
         [MenuItem("Asset Auditing/Auditor View")]
@@ -89,22 +98,6 @@ namespace UnityAssetAuditor
             get { return m_TreeView; }
         }
 
-        void InitIfNeeded()
-        {
-            if (!m_Initialized)
-            {
-                act = FixRule;
-                
-                
-                if(!gatherAssetsComplete) GatherAssetRules();
-
-                if(!gatherDataComplete && gatherAssetsComplete)
-                    GatherData();
-
-                if (gatherAssetsComplete && gatherDataComplete) m_Initialized = true;
-            }
-        }
-
         private void  FixRule(AssetAuditTreeElement assetAuditTreeElement)
         {
             AssetAuditor.FixRule(assetAuditTreeElement , assetRules[selected]);
@@ -132,7 +125,6 @@ namespace UnityAssetAuditor
         {
             AssetAuditor.queueComplete -= OnGatherAssetRulesComplete;
             gatherAssetsComplete = true;
-            GatherData();
         }
 
 
@@ -145,19 +137,18 @@ namespace UnityAssetAuditor
             AssetAuditor.ClearQueue();
             AssetAuditor.UpdateAffectedAssets(assetRules[selected]);
             AssetAuditor.AddEnumerator(AssetAuditor.GatherData(assetRules[selected],elements,selectedSelective));  
-            
         }
         
         private void OnGatherDataComplete()
         {
             AssetAuditor.queueComplete -= OnGatherDataComplete;
 
-            if (m_Initialized)
-            {
-                // Check if it already exists (deserialized from window layout file or scriptable object)
-                if (m_TreeViewState == null)
-                    m_TreeViewState = new TreeViewState();
+            // Check if it already exists (deserialized from window layout file or scriptable object)
+            if (m_TreeViewState == null)
+                m_TreeViewState = new TreeViewState();
 
+            if (m_TreeView != null && elements.Count > 0)
+            {
                 m_TreeView.treeModel.SetData(elements);
                 m_TreeView.Reload();
             }
@@ -187,37 +178,53 @@ namespace UnityAssetAuditor
 
         void OnGUI()
         {
-            if (!m_Initialized)
+            switch (state)
             {
-                InitIfNeeded();
-                if (gatherAssetsComplete && gatherDataComplete)
-                {
-                    
+                case State.Uninitialized:
+                    act = FixRule;
+                    GatherAssetRules();
+                    state = State.GatheringRules;
+                    break;
 
-                    // Check if it already exists (deserialized from window layout file or scriptable object)
-                   if (m_TreeViewState == null)
-                        m_TreeViewState = new TreeViewState();
+                case State.GatheringRules:
+                    if (gatherAssetsComplete)
+                    {
+                        GatherData();
+                        state = State.GatheringData;
+                    }
+                    break;
 
-                    var headerState =
-                        AssetAuditTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
-                    if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
-                        MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
-                    m_MultiColumnHeaderState = headerState;
+                case State.GatheringData:
+                    if (gatherDataComplete)
+                    {
+                        // Check if it already exists (deserialized from window layout file or scriptable object)
+                        if (m_TreeViewState == null)
+                            m_TreeViewState = new TreeViewState();
 
-                    var multiColumnHeader = new MultiColumnHeader(headerState); 
-                    var treeModel = new TreeModel<AssetAuditTreeElement>(elements); 
-                    m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act); 
-                    GUILayout.Label(" no asset rules have been found in the project");
+                        var headerState =
+                            AssetAuditTreeView.CreateDefaultMultiColumnHeaderState(multiColumnTreeViewRect.width);
+                        if (MultiColumnHeaderState.CanOverwriteSerializedFields(m_MultiColumnHeaderState, headerState))
+                            MultiColumnHeaderState.OverwriteSerializedFields(m_MultiColumnHeaderState, headerState);
+                        m_MultiColumnHeaderState = headerState;
 
-                    m_Initialized = true;
-                }
-                return;
+                        var multiColumnHeader = new MultiColumnHeader(headerState); 
+                        var treeModel = new TreeModel<AssetAuditTreeElement>(elements); 
+                        m_TreeView = new AssetAuditTreeView(m_TreeViewState, multiColumnHeader, treeModel, act); 
+                        GUILayout.Label(" no asset rules have been found in the project");
+
+                        state = State.Initialized;
+                    }
+                    break;
+
+                case State.Initialized:
+                    DoRuleSelectionGUI();
+                    SearchBar(toolbarRect);
+                    DoTreeView(multiColumnTreeViewRect);
+                    BottomToolBar(bottomToolbarRect);
+                    break;
             }
-            DoRuleSelectionGUI();
-            SearchBar(toolbarRect);
-            DoTreeView(multiColumnTreeViewRect);
+                    
             DoProgressBar(progressBarRect);
-            BottomToolBar(bottomToolbarRect);
         }
 
         private void DoProgressBar(Rect rect)
