@@ -270,7 +270,6 @@ namespace UnityAssetAuditor
             }
 
             // make wildcard editable and update selection from it
-            // tODO doesnt update the wildcard that has been saved
             if (assetRules != null && selected != -1 && !string.IsNullOrEmpty(assetRules[selected].WildCard))
             {
                 AssetAuditor.AssetRule ar = assetRules[selected];
