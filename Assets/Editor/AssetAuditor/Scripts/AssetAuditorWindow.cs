@@ -26,6 +26,8 @@ namespace UnityAssetAuditor
         private List<string> assetRuleNames;
         private static int selected = 0;
         private static int selectedSelective = 0;
+        private static bool editSelective;
+        private static int editSelectiveProp = 0;
         private string[] affectedAssets;
         private Action<AssetAuditTreeElement> act;
 
@@ -61,12 +63,12 @@ namespace UnityAssetAuditor
 
         Rect multiColumnTreeViewRect
         {
-            get { return new Rect(20, 90, position.width - 40, position.height - 130); }
+            get { return new Rect(20, 110, position.width - 40, position.height - 130); }
         }
 
         Rect toolbarRect
         {
-            get { return new Rect(20f, 70f, position.width - 40f, 20f); }
+            get { return new Rect(20f, 90f, position.width - 40f, 20f); }
         }
 
         Rect bottomToolbarRect
@@ -92,6 +94,26 @@ namespace UnityAssetAuditor
         Rect SelectivePropRect
         {
             get { return new Rect(20, 50, position.width - 40f, 15f); }
+        }
+
+        Rect AddSelectivePropRect
+        {
+            get {return new Rect(20,70,18,18);}
+        }
+
+        Rect RemoveSelectivePropRect
+        {
+            get { return new Rect(40,70,18,18);}
+        }
+
+        Rect EditSelectedPropButtonRect
+        {
+            get {return new Rect(60,70, 40,18 );}
+        }
+        
+        Rect EditSelectedPropDropDownRect
+        {
+            get {return new Rect(110,70, 400,18 );}
         }
 
         public AssetAuditTreeView treeView
@@ -270,8 +292,7 @@ namespace UnityAssetAuditor
             }
 
             // make wildcard editable and update selection from it
-            // tODO doesnt update the wildcard that has been saved
-            if (assetRules != null && selected != -1 && !string.IsNullOrEmpty(assetRules[selected].WildCard))
+            if (assetRules != null && selected != -1)// && !string.IsNullOrEmpty(assetRules[selected].WildCard))
             {
                 AssetAuditor.AssetRule ar = assetRules[selected];
                 EditorGUI.BeginChangeCheck();
@@ -285,11 +306,53 @@ namespace UnityAssetAuditor
                 
                 if (ar.SelectiveProperties != null && ar.SelectiveProperties.Count > 0)
                 {
-                    EditorGUI.BeginChangeCheck();
                     selectedSelective = EditorGUI.Popup(SelectivePropRect, "Selective Properties", selectedSelective, ar.SelectiveProperties.ToArray());
-                    if (EditorGUI.EndChangeCheck())
+                }
+                else
+                {
+                    EditorGUI.LabelField(SelectivePropRect , " No Selective Properties in the Asset Rule");
+                }
+
+                if (GUI.Button(AddSelectivePropRect, "+"))
+                {
+                    // add a new selective property              
+                    if (ar.SelectiveProperties != null && !ar.SelectiveProperties.Contains("Unnasigned property")) ar.SelectiveProperties.Add("Unnasigned property");
+                    assetRules[selected] = ar;
+                    GatherData();
+                    AssetAuditor.WriteUserData(AssetDatabase.GUIDToAssetPath(ar.AssetGuid), ar);
+                }
+                if (ar.SelectiveProperties != null && ar.SelectiveProperties.Count > 0)
+                {
+                    if (GUI.Button(RemoveSelectivePropRect, "-"))
                     {
+                        // remove last selective property
+                        ar.SelectiveProperties.RemoveAt(ar.SelectiveProperties.Count - 1);
+                        
+                        if (ar.SelectiveProperties.Count == 0)
+                            ar.SelectiveMode = false;
+                        
+                        assetRules[selected] = ar;
                         GatherData();
+                        AssetAuditor.WriteUserData(AssetDatabase.GUIDToAssetPath(ar.AssetGuid), ar);
+                    }
+                    editSelective = GUI.Toggle(EditSelectedPropButtonRect, editSelective, "Edit", "Button");
+                    if (editSelective)
+                    {
+                        SerializedObject so = new SerializedObject(
+                            AssetImporter.GetAtPath(AssetDatabase.GUIDToAssetPath(ar.AssetGuid)));
+                        EditorGUI.BeginChangeCheck();
+                        editSelectiveProp = EditorGUI.Popup(EditSelectedPropDropDownRect, editSelectiveProp,
+                            AssetAuditor.GetPropertyNames(so));
+
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            ar.SelectiveProperties[selectedSelective] =
+                                AssetAuditor.GetPropertyNames(so)[editSelectiveProp];
+                            
+                            assetRules[selected] = ar;
+                            GatherData();
+                            AssetAuditor.WriteUserData(AssetDatabase.GUIDToAssetPath(ar.AssetGuid), ar);
+                        }
                     }
                 }
             }
