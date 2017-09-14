@@ -174,7 +174,7 @@ namespace UnityAssetAuditor
             
             // drop down for type
             EditorGUI.BeginChangeCheck();
-            newRule.assetType = (AssetAuditor.AssetType) EditorGUILayout.IntPopup("Rule Type: ", (int)newRule.assetType, new string[]{"Texture", "Model","Audio"},new int[]{0,1,2} );
+            newRule.assetType = (AssetAuditor.AssetType) EditorGUILayout.IntPopup("Rule Type: ", (int)newRule.assetType, new[]{"Texture", "Model","Audio"},new[]{0,1,2} );
             if (EditorGUI.EndChangeCheck())
             {
                 newRule.SelectiveProperties = new List<string>();
@@ -184,7 +184,7 @@ namespace UnityAssetAuditor
             
             if (!AssetAuditor.RuleExists(newRule))
             {
-                if (GUILayout.Button("Create New " + newRule.assetType.ToString() + " Rule"))
+                if (GUILayout.Button("Create New " + newRule.assetType + " Rule"))
                 {
                     switch (newRule.assetType)
                     {
