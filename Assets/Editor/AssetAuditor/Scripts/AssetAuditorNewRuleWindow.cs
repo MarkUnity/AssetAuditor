@@ -33,15 +33,15 @@ namespace UnityAssetAuditor
         public static void ShowWindow()
         {
 
-            ProxyAssetFolder = Application.dataPath.Substring(0, Application.dataPath.Length - 6) +
-                               UnityProxyAssetFolder;
+         //   ProxyAssetFolder = Application.dataPath.Substring(0, Application.dataPath.Length - 6) +
+         //                      UnityProxyAssetFolder;
 
 
             window = GetWindow<AssetAuditorNewRuleWindow>();
             window.Show();
             window.titleContent = new GUIContent("Asset Auditor Creation");
 
-            if (!Directory.Exists(ProxyAssetFolder)) AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor","ProxyAssets");
+            if (!Directory.Exists(AssetAuditorPreferences.ProxyAssetsDirectory)) AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor","ProxyAssets");
 
             UpdateExistingRules();
             scrollPosition = Vector2.zero;
@@ -244,13 +244,13 @@ namespace UnityAssetAuditor
             switch (assetType)
             {
                 case AssetAuditor.AssetType.Texture:
-                    so = new SerializedObject(TextureImporter.GetAtPath(AssetAuditor.ProxyTexturePath));
+                    so = new SerializedObject(TextureImporter.GetAtPath(AssetAuditorPreferences.ProxyTexturePath));
                     break;
                 case AssetAuditor.AssetType.Model:
-                    so = new SerializedObject(ModelImporter.GetAtPath(AssetAuditor.ProxyModelPath));
+                    so = new SerializedObject(ModelImporter.GetAtPath(AssetAuditorPreferences.ProxyModelPath));
                     break;
                 case AssetAuditor.AssetType.Audio:
-                    so = new SerializedObject(AudioImporter.GetAtPath(AssetAuditor.ProxyAudioPath));
+                    so = new SerializedObject(AudioImporter.GetAtPath(AssetAuditorPreferences.ProxyAudioPath));
                     break;
                 case AssetAuditor.AssetType.Folder:
                     break;
