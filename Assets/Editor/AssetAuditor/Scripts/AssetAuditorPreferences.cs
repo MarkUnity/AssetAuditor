@@ -34,33 +34,76 @@ public class AssetAuditorPreferences
     [PreferenceItem("Asset Auditor")]
     public static void PreferencesGUI()
     {
-        EditorGUI.BeginChangeCheck();
-        proxyAssetDir = EditorGUILayout.TextField("Proxy Asset Directory", proxyAssetDir);
-        if (EditorGUI.EndChangeCheck())
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Proxy Assets Directory" , EditorStyles.boldLabel);
+        if (GUILayout.Button("...", EditorStyles.miniButton))
         {
-            EditorPrefs.SetString(proxyAssetDirKey , proxyAssetDir);
-        }
+            string path = EditorUtility.OpenFolderPanel("Select Proxy Assets Directory", proxyAssetDir, "");
 
-        EditorGUI.BeginChangeCheck();
-        proxyTexturePath = EditorGUILayout.TextField("Proxy Texture Path", proxyTexturePath);
-        if (EditorGUI.EndChangeCheck())
-        {
-            EditorPrefs.SetString(proxyTexturePathKey , proxyTexturePath);
+            if (path.Length > 0)
+            {
+                proxyAssetDir = path.Substring(Application.dataPath.Length - 6);;
+                EditorPrefs.SetString(proxyAssetDirKey, proxyAssetDir);
+            }
         }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField(proxyAssetDir);
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
+
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Proxy Texture Path" , EditorStyles.boldLabel);
+        if (GUILayout.Button("...", EditorStyles.miniButton))
+        {
+            string path  = EditorUtility.OpenFilePanel("Select Proxy Texture", proxyTexturePath, "jpg");
+
+            if (path.Length > 0)
+            {
+                proxyTexturePath = path.Substring(Application.dataPath.Length - 6);
+                EditorPrefs.SetString(proxyTexturePathKey, proxyTexturePath);
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField( proxyTexturePath);
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
         
-        EditorGUI.BeginChangeCheck();
-        proxyModelPath = EditorGUILayout.TextField("Proxy Model Path", proxyModelPath);
-        if (EditorGUI.EndChangeCheck())
-        {
-            EditorPrefs.SetString(proxyModelPathKey , proxyModelPath);
-        }
         
-        EditorGUI.BeginChangeCheck();
-        proxyAudioPath = EditorGUILayout.TextField("Proxy Audio Path", proxyAudioPath);
-        if (EditorGUI.EndChangeCheck())
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Proxy Model Path" , EditorStyles.boldLabel);
+        if (GUILayout.Button("...", EditorStyles.miniButton))
         {
-            EditorPrefs.SetString(proxyAudioPathKey , proxyAudioPath);
+            string path  = EditorUtility.OpenFilePanel("Select Model Texture", proxyModelPath, "jpg");
+
+            if (path.Length > 0)
+            {
+                proxyModelPath = path.Substring(Application.dataPath.Length - 6);
+                EditorPrefs.SetString(proxyModelPathKey, proxyModelPath);
+            }
         }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField( proxyModelPath);
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
+
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Proxy Audio Path" , EditorStyles.boldLabel);
+        if (GUILayout.Button("...", EditorStyles.miniButton))
+        {
+            string path  = EditorUtility.OpenFilePanel("Select Audio Texture", proxyAudioPath, "jpg");
+
+            if (path.Length > 0)
+            {
+                proxyAudioPath = path.Substring(Application.dataPath.Length - 6);
+                EditorPrefs.SetString(proxyAudioPathKey, proxyAudioPath);
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.LabelField( proxyAudioPath);
+        EditorGUILayout.Space();
+        EditorGUILayout.Space();
     }
 
 

@@ -17,68 +17,10 @@ namespace UnityAssetAuditor
     
     public class AssetAuditor
     {
-        static AssetAuditor()
-        {
-            EditorApplication.update += TickEnumerator;
-            enumerableQueue = new Queue<IEnumerable<float>>();
-        }
-
-        private static void TickEnumerator()
-        {
-            if (currentEnumerable == null)
-            {
-                return;
-            }
-
-            if (!currentEnumerator.MoveNext())
-            {
-                currentEnumerable = null;
-                currentEnumerator = null;
-
-                if (enumerableQueue.Count == 0)
-                {
-                    if (queueComplete != null) queueComplete.Invoke();
-                }
-                else
-                {
-                    currentEnumerable = enumerableQueue.Dequeue();
-                    currentEnumerator = currentEnumerable.GetEnumerator();
-                }
-            }
-        }
-
-        public static float GetProgress()
-        {
-            return currentEnumerator != null ? currentEnumerator.Current : 0f;
-        }
-
         public static IEnumerable<float> currentEnumerable;
-
         public static IEnumerator<float> currentEnumerator;
-
         public static Queue<IEnumerable<float>> enumerableQueue;
-
-        public static event OnQueueComplete queueComplete;
-        
-        public static void AddEnumerator(IEnumerable<float> enumerator)
-        {
-            enumerableQueue.Enqueue(enumerator);
-
-            if (currentEnumerable == null)
-            {
-                currentEnumerable = enumerableQueue.Dequeue();
-                currentEnumerator = currentEnumerable.GetEnumerator();
-            }
-        }
-
-        public static void ClearQueue()
-        {
-            enumerableQueue.Clear();
-
-            currentEnumerable = null;
-            currentEnumerator = null;
-        }
-
+        public static event OnQueueComplete queueComplete;      
         private static List<string> foundAssets;
 
         public enum WildCardMatchType
@@ -107,6 +49,66 @@ namespace UnityAssetAuditor
             public bool SelectiveMode;
             public List<string> SelectiveProperties;
         }
+        
+        
+        static AssetAuditor()
+        {
+            EditorApplication.update += TickEnumerator;
+            enumerableQueue = new Queue<IEnumerable<float>>();
+        }
+
+        
+        private static void TickEnumerator()
+        {
+            if (currentEnumerable == null)
+            {
+                return;
+            }
+
+            if (!currentEnumerator.MoveNext())
+            {
+                currentEnumerable = null;
+                currentEnumerator = null;
+
+                if (enumerableQueue.Count == 0)
+                {
+                    if (queueComplete != null) queueComplete.Invoke();
+                }
+                else
+                {
+                    currentEnumerable = enumerableQueue.Dequeue();
+                    currentEnumerator = currentEnumerable.GetEnumerator();
+                }
+            }
+        }
+
+        
+        public static float GetProgress()
+        {
+            return currentEnumerator != null ? currentEnumerator.Current : 0f;
+        }
+
+        
+        public static void AddEnumerator(IEnumerable<float> enumerator)
+        {
+            enumerableQueue.Enqueue(enumerator);
+
+            if (currentEnumerable == null)
+            {
+                currentEnumerable = enumerableQueue.Dequeue();
+                currentEnumerator = currentEnumerable.GetEnumerator();
+            }
+        }
+
+        
+        public static void ClearQueue()
+        {
+            enumerableQueue.Clear();
+
+            currentEnumerable = null;
+            currentEnumerator = null;
+        }
+
 
         public static Type TypeFromAssetType(AssetType assetType)
         {
@@ -125,11 +127,13 @@ namespace UnityAssetAuditor
             }
         }
 
+        
         public static string[] GetAffectedAssets()
         {
             return foundAssets.ToArray();
         }
 
+        
         public static void UpdateAffectedAssets(AssetRule assetRule)
         {
             foundAssets = new List<string>();
@@ -381,6 +385,7 @@ namespace UnityAssetAuditor
             return CompareSerializedProperty(foundAssetSP, assetRuleSP);
         }
 
+        
         public static bool CompareSerializedProperty(SerializedProperty foundAssetSp, SerializedProperty assetRuleSp)
         {
 
@@ -479,13 +484,6 @@ namespace UnityAssetAuditor
         }
 
 
-        private static bool IsSameOrBaseClass(Type b, Type a)
-        {
-            if (b == null || a == null) return false;
-
-            return b.IsSubclassOf(a) || b == a;
-        }
-
         public static bool CompareSerializedObject(SerializedObject rule, SerializedObject asset)
         {
             SerializedProperty ruleIter = rule.GetIterator();
@@ -525,6 +523,7 @@ namespace UnityAssetAuditor
             }
         }
 
+        
         public static void FixRule(AssetAuditTreeElement data , AssetRule assetRule)
         {
 
@@ -600,11 +599,12 @@ namespace UnityAssetAuditor
             data.conforms = true;
         }
         
+        
         private static void CopySelectiveProperties(SerializedObject affectedAssetImporterSO, SerializedObject ruleImporterSO, AssetRule assetRule)
         {
             foreach (string property in assetRule.SelectiveProperties)
             {
-                string realname = AssetAuditor.GetPropertyNameFromDisplayName(affectedAssetImporterSO, property);
+                string realname = GetPropertyNameFromDisplayName(affectedAssetImporterSO, property);
 
                 SerializedProperty assetRuleSP = ruleImporterSO.FindProperty(realname);
 
@@ -616,6 +616,7 @@ namespace UnityAssetAuditor
             }
         }
 
+        
         public static bool HaveEqualProperties<T>(T rhs, T lhs)
         {
             if (rhs != null && lhs != null)
@@ -635,6 +636,7 @@ namespace UnityAssetAuditor
             return true;
         }
         
+        
         public static string GetPropertyNameFromDisplayName(SerializedObject so, string displayName)
         {
             SerializedProperty iter = so.GetIterator();
@@ -649,6 +651,7 @@ namespace UnityAssetAuditor
 
             return null;
         }
+        
         
         public static string[] GetPropertyNames(SerializedObject so)
         {
@@ -665,6 +668,7 @@ namespace UnityAssetAuditor
             return propNames.ToArray();
         }
 
+        
         public static void CreateProxyAudio(AssetRule newRule , ref string currentAsset)
         {
             string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ".wav";
@@ -684,6 +688,7 @@ namespace UnityAssetAuditor
             WriteUserData(newAssetPath , newRule, ref currentAsset);
         }
 
+        
         public static void CreateProxyTexture(AssetRule newRule, ref string currentAsset)
         {    
             string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ".jpg";
@@ -693,6 +698,7 @@ namespace UnityAssetAuditor
             WriteUserData(newAssetPath , newRule , ref currentAsset);
         }
 
+        
         public static void WriteUserData(string path, AssetRule assetRule, ref string currentAsset)
         {
             AssetImporter assetImporter = AssetImporter.GetAtPath(path);
@@ -707,6 +713,7 @@ namespace UnityAssetAuditor
             currentAsset = assetRule.AssetGuid;
         }
         
+        
         public static void WriteUserData(string path , AssetRule assetRule)
         {
             AssetImporter assetImporter = AssetImporter.GetAtPath(path);
@@ -719,6 +726,7 @@ namespace UnityAssetAuditor
             AssetDatabase.SaveAssets();
         }
 
+        
         public static bool RuleExists(AssetRule assetRule)
         {
             if (!AssetDatabase.IsValidFolder(AssetAuditorPreferences.ProxyAssetsDirectory))
@@ -727,12 +735,10 @@ namespace UnityAssetAuditor
 
                 string dir = AssetAuditorPreferences.ProxyAssetsDirectory.Substring(0,
                     AssetAuditorPreferences.ProxyAssetsDirectory.Length - folder.Length);
-                
-                
+               
                 AssetDatabase.CreateFolder(dir, folder);
             }
-                
-            
+                 
             foreach (string asset in AssetDatabase.FindAssets("", new[] {AssetAuditorPreferences.ProxyAssetsDirectory}))
             {
                 string guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
@@ -745,5 +751,7 @@ namespace UnityAssetAuditor
             }
             return false;
         }
+        
+        
     }
 }
