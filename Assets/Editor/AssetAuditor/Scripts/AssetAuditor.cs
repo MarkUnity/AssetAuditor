@@ -366,7 +366,7 @@ namespace UnityAssetAuditor
 
             if (assetImporterSO == null || ruleImporterSO == null) return false; // TODO log message here
 
-            if (!assetRule.SelectiveMode)
+            if (!assetRule.SelectiveMode || assetRule.SelectiveProperties.Count <= 0)
             {
                 return CompareSerializedObject(assetImporterSO, ruleImporterSO);
             }
