@@ -671,28 +671,44 @@ namespace UnityAssetAuditor
         
         public static void CreateProxyAudio(AssetRule newRule , ref string currentAsset)
         {
-            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ".wav";
-            AssetDatabase.CopyAsset(AssetAuditorPreferences.ProxyAudioPath, newAssetPath);
-
+            string audioProxy = AssetAuditorPreferences.ProxyAudioPath;
+            string ext = audioProxy.Substring( audioProxy.LastIndexOf( '.' ) );
+            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ext;
+            if( !AssetDatabase.CopyAsset( audioProxy, newAssetPath ) )
+            {
+                Debug.LogWarning( "Failed to copy proxy asset from " + audioProxy );
+                return;
+            }
+            
             AssetDatabase.ImportAsset(newAssetPath);
-
             WriteUserData(newAssetPath , newRule, ref currentAsset);
         }
 
         public static void CreateProxyModel(AssetRule newRule, ref string currentAsset)
         {
-            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory +Path.DirectorySeparatorChar + newRule.RuleName + ".fbx";
-            AssetDatabase.CopyAsset(AssetAuditorPreferences.ProxyModelPath, newAssetPath);
+            string modelProxy = AssetAuditorPreferences.ProxyModelPath;
+            string ext = modelProxy.Substring( modelProxy.LastIndexOf( '.' ) );
+            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ext;
+            if( !AssetDatabase.CopyAsset( modelProxy, newAssetPath ) )
+            {
+                Debug.LogWarning( "Failed to copy proxy asset from " + modelProxy );
+                return;
+            }
 
             AssetDatabase.ImportAsset(newAssetPath);
             WriteUserData(newAssetPath , newRule, ref currentAsset);
         }
-
         
         public static void CreateProxyTexture(AssetRule newRule, ref string currentAsset)
-        {    
-            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ".jpg";
-            AssetDatabase.CopyAsset(AssetAuditorPreferences.ProxyTexturePath, newAssetPath);
+        {
+            string textureProxy = AssetAuditorPreferences.ProxyTexturePath;
+            string ext = textureProxy.Substring( textureProxy.LastIndexOf( '.' ) );
+            string newAssetPath = AssetAuditorPreferences.ProxyAssetsDirectory + Path.DirectorySeparatorChar + newRule.RuleName + ext;
+            if( !AssetDatabase.CopyAsset( textureProxy, newAssetPath ) )
+            {
+                Debug.LogWarning( "Failed to copy proxy asset from " + textureProxy );
+                return;
+            }
 
             AssetDatabase.ImportAsset(newAssetPath);
             WriteUserData(newAssetPath , newRule , ref currentAsset);
