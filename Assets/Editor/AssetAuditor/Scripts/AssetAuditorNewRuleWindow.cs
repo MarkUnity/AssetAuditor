@@ -23,26 +23,24 @@ namespace UnityAssetAuditor
 
         private static Vector2 scrollPosition;
 
-        private static string UnityProxyAssetFolder = "Assets/Editor/AssetAuditor/ProxyAssets";
-        private static string ProxyAssetFolder;
-        
-        
-
-
         [MenuItem("Asset Auditing/New Audit Rule")]
         public static void ShowWindow()
         {
-
-            ProxyAssetFolder = Application.dataPath.Substring(0, Application.dataPath.Length - 6) +
-                               UnityProxyAssetFolder;
-
-
             window = GetWindow<AssetAuditorNewRuleWindow>();
             window.Show();
             window.titleContent = new GUIContent("Asset Auditor Creation");
 
-            if (!Directory.Exists(ProxyAssetFolder)) AssetDatabase.CreateFolder("Assets/Editor/AssetAuditor","ProxyAssets");
+            if (!AssetDatabase.IsValidFolder(AssetAuditorPreferences.ProxyAssetsDirectory))
+            {
+                string folder = AssetAuditorPreferences.ProxyAssetsDirectory.Split(Path.DirectorySeparatorChar).Last();
 
+                string dir = AssetAuditorPreferences.ProxyAssetsDirectory.Substring(0,
+                    AssetAuditorPreferences.ProxyAssetsDirectory.Length - folder.Length);
+                
+                
+                AssetDatabase.CreateFolder(dir, folder);
+            }
+            
             UpdateExistingRules();
             scrollPosition = Vector2.zero;
 
@@ -81,7 +79,7 @@ namespace UnityAssetAuditor
             assetRules = new List<AssetAuditor.AssetRule>();
 
             // get all assets in the proxyassets folder
-            foreach (var asset in AssetDatabase.FindAssets("", new[] {UnityProxyAssetFolder}))
+            foreach (var asset in AssetDatabase.FindAssets("", new[] {AssetAuditorPreferences.ProxyAssetsDirectory}))
             {
                 var guidToAssetPath = AssetDatabase.GUIDToAssetPath(asset);
                 var assetImporter = AssetImporter.GetAtPath(guidToAssetPath);
@@ -216,7 +214,7 @@ namespace UnityAssetAuditor
             GUILayout.Space(5);
 
 
-            Rect rt = GUILayoutUtility.GetRect(5, window.position.width-10, 18, 18);
+            Rect rt = GUILayoutUtility.GetRect(5, window ? window.position.width-10 : 100f, 18, 18);
             EditorGUI.ProgressBar(rt,AssetAuditor.GetProgress(), "Affected Asset Search Progress " + (AssetAuditor.GetProgress() * 100f).ToString("0.00%"));
 
             scrollPosition = GUILayout.BeginScrollView(scrollPosition);
@@ -244,13 +242,13 @@ namespace UnityAssetAuditor
             switch (assetType)
             {
                 case AssetAuditor.AssetType.Texture:
-                    so = new SerializedObject(TextureImporter.GetAtPath(AssetAuditor.ProxyTexturePath));
+                    so = new SerializedObject(TextureImporter.GetAtPath(AssetAuditorPreferences.ProxyTexturePath));
                     break;
                 case AssetAuditor.AssetType.Model:
-                    so = new SerializedObject(ModelImporter.GetAtPath(AssetAuditor.ProxyModelPath));
+                    so = new SerializedObject(ModelImporter.GetAtPath(AssetAuditorPreferences.ProxyModelPath));
                     break;
                 case AssetAuditor.AssetType.Audio:
-                    so = new SerializedObject(AudioImporter.GetAtPath(AssetAuditor.ProxyAudioPath));
+                    so = new SerializedObject(AudioImporter.GetAtPath(AssetAuditorPreferences.ProxyAudioPath));
                     break;
                 case AssetAuditor.AssetType.Folder:
                     break;
